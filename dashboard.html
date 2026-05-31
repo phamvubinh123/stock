@@ -1049,7 +1049,7 @@ function hi(id, v) {
   const el = document.getElementById(id);
   if (!el || v == null) return;
   // type=number chỉ chấp nhận dấu chấm thập phân, không dùng vi-VN
-  el.value = el.type === 'number' ? (Math.round(v * 1000) / 1000) : fmtInput(v);
+  el.value = el.type === 'number' ? (Math.round(v * 1000) / 1000) : (typeof v === 'string' && isNaN(v) ? v : fmtInput(v));
   el.classList.add('hi');
   setTimeout(() => el.classList.remove('hi'), 1800);
 }
