@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Agent — iBoard Style</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F0F1F5;
+  --surface: #FFFFFF;
+  --purple: #4A3F8F;
+  --purple-dark: #3D3478;
+  --purple-light: #EDEAF7;
+  --purple-muted: #7B6FC0;
+  --green: #27AE60;
+  --green-bg: #E8F8EF;
+  --red: #EB5757;
+  --red-bg: #FFEBED;
+  --yellow: #F2994A;
+  --yellow-bg: #FFF8E7;
+  --text: #1A1A2E;
+  --text2: #4B5563;
+  --text3: #9CA3AF;
+  --border: #E8EAED;
+  --shadow: 0 1px 3px rgba(0,0,0,.06);
+  --radius: 10px;
+  --nav-h: 58px;
+  --header-h: 52px;
+  --subnav-h: 44px;
+  --sans: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: #C4C9D4; border-radius: 4px; }
+
+/* ── APP SHELL ── */
+.app-outer {
+  display: flex;
+  justify-content: center;
+  background: var(--bg);
+  min-height: 100vh;
+}
+.app {
+  width: 100%;
+  max-width: 1080px;
+  min-height: 100vh;
+  display: flex;
+  background: var(--bg);
+}
+.app-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+  overflow-y: auto;
+}
+
+/* ── HEADER ── */
+.app-header {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  z-index: 50;
+}
+.avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--purple-muted));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: .75rem; font-weight: 700; flex-shrink: 0;
+}
+.search-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #F3F4F6;
+  border-radius: 20px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.search-wrap svg { flex-shrink: 0; opacity: .45; }
+.search-wrap input {
+  border: none; background: transparent; outline: none;
+  font-family: var(--sans); font-size: .88rem; color: var(--text);
+  width: 100%;
+}
+.search-wrap input::placeholder { color: var(--text3); }
+.header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.icon-btn {
+  width: 34px; height: 34px;
+  border: none; background: transparent;
+  border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--purple); position: relative;
+}
+.icon-btn:hover { background: var(--purple-light); }
+.badge {
+  position: absolute; top: 2px; right: 2px;
+  background: var(--red); color: #fff;
+  font-size: .55rem; font-weight: 700;
+  padding: 1px 4px; border-radius: 8px; min-width: 16px; text-align: center;
+}
+
+/* ── SUB NAV (horizontal tabs) ── */
+.sub-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  padding: 0 28px;
+}
+.sub-nav::-webkit-scrollbar { display: none; }
+.sub-tab {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.sub-tab:hover { color: var(--purple); }
+.sub-tab.active {
+  color: var(--purple);
+  font-weight: 700;
+  border-bottom-color: var(--purple);
+  background: linear-gradient(to bottom, transparent 90%, rgba(74,63,143,.04));
+}
+
+/* ── BODY ── */
+.app-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: calc(var(--nav-h) + 12px);
+  background: var(--bg);
+}
+.page { display: none; }
+.page.active { display: block; animation: fadeIn .25s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ── SUMMARY CARD (SSI portfolio style) ── */
+.summary-card {
+  background: var(--surface);
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.summary-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.summary-label { font-size: .78rem; color: var(--text3); margin-bottom: 4px; }
+.summary-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.summary-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .78rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.summary-item {
+  background: #F8F9FB;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.summary-item .lbl { font-size: .68rem; color: var(--text3); margin-bottom: 3px; }
+.summary-item .val { font-size: .88rem; font-weight: 700; }
+
+/* ── ACTION BAR ── */
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.action-bar .info { font-size: .72rem; color: var(--text3); }
+.action-bar .info strong { color: var(--text2); }
+.action-btns { display: flex; gap: 6px; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: .78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--purple-muted); color: var(--purple); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--purple);
+  color: #fff;
+  border-color: var(--purple);
+}
+.btn-primary:hover { background: var(--purple-dark); border-color: var(--purple-dark); color: #fff; }
+.btn-buy {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+  flex: 1;
+  padding: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+}
+.btn-sell {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+  flex: 1;
+  padding: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+/* ── TABLE (SSI watchlist style) ── */
+.data-table { background: var(--surface); }
+.table-head {
+  display: grid;
+  grid-template-columns: 72px 1fr 72px 56px 80px 72px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: #FAFBFC;
+}
+.table-head span {
+  font-size: .68rem;
+  color: var(--text3);
+  font-weight: 500;
+}
+.table-head span:not(:first-child) { text-align: right; }
+.table-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 72px 56px 80px 72px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .12s;
+}
+.table-row:hover { background: #F8F9FB; }
+.table-row .sym {
+  font-size: .92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.table-row .sub { font-size: .65rem; color: var(--text3); margin-top: 1px; }
+.table-row .cell { text-align: right; font-size: .85rem; font-weight: 500; }
+.table-row .cell-sm { font-size: .72rem; color: inherit; opacity: .85; }
+
+/* color states */
+.up, .cg, .cg2 { color: var(--green) !important; }
+.down, .cr { color: var(--red) !important; }
+.flat, .cy { color: var(--yellow) !important; }
+.row-up .cell:not(.vol) { color: var(--green); }
+.row-down .cell:not(.vol) { color: var(--red); }
+.row-flat .cell:not(.vol) { color: var(--yellow); }
+.vol { color: var(--text3) !important; font-size: .78rem !important; }
+
+/* score bar in table */
+.score-mini {
+  display: flex; align-items: center; gap: 6px; justify-content: flex-end;
+}
+.score-track {
+  width: 48px; height: 4px; background: #E8EAED;
+  border-radius: 2px; overflow: hidden;
+}
+.score-fill { height: 100%; border-radius: 2px; }
+.score-txt { font-size: .72rem; font-weight: 700; min-width: 32px; text-align: right; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin: 10px 14px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+.card-title {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--purple);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ── AI BOX ── */
+.ai-box {
+  margin: 10px 14px;
+  padding: 14px 16px;
+  background: var(--purple-light);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--purple);
+  font-size: .84rem;
+  line-height: 1.65;
+  color: var(--text2);
+  position: relative;
+}
+.ai-box::before {
+  content: 'AI';
+  position: absolute;
+  top: 10px; right: 12px;
+  font-size: .6rem;
+  font-weight: 700;
+  color: var(--purple);
+  background: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ── FORMS ── */
+.fetch-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.fg { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; }
+.fg label { font-size: .68rem; color: var(--text3); font-weight: 500; }
+.fg input, .fg select {
+  background: #F8F9FB;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--sans);
+  font-size: .88rem;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
+.fg input:focus, .fg select:focus { border-color: var(--purple); background: #fff; }
+
+/* ── LOG ── */
+.log {
+  background: #F8F9FB;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: .72rem;
+  color: var(--text2);
+  line-height: 1.8;
+  max-height: 120px;
+  overflow-y: auto;
+  display: none;
+  margin-top: 10px;
+}
+.log.show { display: block; }
+.log-ok { color: var(--green); }
+.log-err { color: var(--red); }
+.log-info { color: var(--purple); }
+
+/* ── DATA GRID (Buffett inputs) ── */
+.yh {
+  display: grid;
+  grid-template-columns: 2fr repeat(5, 1fr);
+  gap: 4px; margin-bottom: 4px;
+}
+.yh span { font-size: .62rem; color: var(--text3); text-align: center; font-weight: 500; }
+.yh span:first-child { text-align: left; }
+.dr {
+  display: grid;
+  grid-template-columns: 2fr repeat(5, 1fr);
+  gap: 4px; margin-bottom: 4px; align-items: center;
+}
+.dr-lbl { font-size: .78rem; color: var(--text2); }
+.dr-lbl small { display: block; font-size: .62rem; color: var(--text3); }
+.dr input {
+  background: #F8F9FB;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: .72rem;
+  text-align: right;
+  outline: none;
+  width: 100%;
+}
+.dr input:focus { border-color: var(--purple); }
+.dr input.hi { border-color: var(--green); background: var(--green-bg); }
+.sub {
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--purple);
+  margin: 14px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ig { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 10px; margin-bottom: 14px; }
+.igrp { display: flex; flex-direction: column; gap: 4px; }
+.igrp label { font-size: .65rem; color: var(--text3); font-weight: 500; }
+.igrp input {
+  background: #F8F9FB; border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: .82rem; outline: none;
+}
+.igrp input:focus { border-color: var(--purple); }
+
+/* ── RESULTS (Buffett) ── */
+#results { display: none; }
+#results.show { display: block; }
+.score-hero {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px; background: var(--purple-light);
+  border-radius: var(--radius); margin: 10px 14px;
+}
+.big-score {
+  font-size: 3.2rem; font-weight: 700; line-height: 1;
+  width: 72px; text-align: center; flex-shrink: 0;
+  color: var(--purple);
+}
+.score-verdict { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.score-metas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sm {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  text-align: center;
+}
+.sm .sv { font-size: .88rem; font-weight: 700; }
+.sm .sl { font-size: .62rem; color: var(--text3); }
+
+/* ── CRITERIA TABLE ── */
+.ct { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.ct th {
+  font-size: .62rem; color: var(--text3); font-weight: 600;
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  text-align: left; background: #FAFBFC;
+}
+.ct td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ct tr:hover td { background: #F8F9FB; }
+.pill {
+  display: inline-flex; padding: 2px 8px; border-radius: 12px;
+  font-size: .62rem; font-weight: 700;
+}
+.pp { background: var(--green-bg); color: var(--green); }
+.pf { background: var(--red-bg); color: var(--red); }
+
+/* ── WATCHLIST TAGS ── */
+.wl-wrap { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+.wl-tags { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.wl-tag {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--purple-light);
+  border: 1px solid rgba(74,63,143,.15);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--purple);
+}
+.wl-tag-x { cursor: pointer; opacity: .5; font-size: 1rem; line-height: 1; }
+.wl-tag-x:hover { opacity: 1; color: var(--red); }
+.wl-add { display: flex; gap: 6px; }
+.wl-add input {
+  background: #F8F9FB; border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; width: 90px;
+  text-transform: uppercase; font-size: .82rem; outline: none;
+}
+.wl-add input:focus { border-color: var(--purple); }
+
+/* ── STAT GRID ── */
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat {
+  background: #F8F9FB;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.stat-val { font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
+.stat-lbl { font-size: .65rem; color: var(--text3); }
+
+/* ── DCF ── */
+.dcf-box {
+  background: var(--green-bg);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex; gap: 16px; align-items: center;
+  margin-bottom: 12px;
+}
+.dcf-num { font-size: 2rem; font-weight: 700; color: var(--green); }
+.dcf-detail { flex: 1; font-size: .8rem; line-height: 1.7; color: var(--text2); }
+.mos-bar { height: 6px; background: #E8EAED; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.mos-fill { height: 100%; border-radius: 3px; }
+.note { font-size: .72rem; color: var(--text3); margin-top: 8px; line-height: 1.5; }
+
+/* ── INLINE TABS ── */
+.inline-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 14px;
+}
+.it {
+  padding: 10px 14px;
+  font-size: .78rem;
+  font-weight: 500;
+  color: var(--text3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.it:hover { color: var(--purple); }
+.it.active { color: var(--purple); font-weight: 700; border-bottom-color: var(--purple); }
+
+/* ── PROGRESS ── */
+.progress-bar {
+  height: 2px; background: #E8EAED;
+  overflow: hidden; display: none;
+}
+.progress-bar.show { display: block; }
+.progress-fill {
+  height: 100%; background: var(--purple);
+  animation: prog 1s ease infinite alternate;
+}
+@keyframes prog { from{width:30%} to{width:80%} }
+
+/* ── SPINNER ── */
+.spinner {
+  display: inline-block; width: 12px; height: 12px;
+  border: 2px solid rgba(74,63,143,.2);
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  vertical-align: middle; margin-right: 4px;
+}
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* ── SPARKLINE BARS ── */
+.bc { margin-top: 4px; }
+.br { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.by { font-size: .6rem; color: var(--text3); width: 28px; }
+.bt { flex: 1; height: 4px; background: #E8EAED; border-radius: 2px; overflow: hidden; }
+.bf { height: 100%; background: var(--purple-muted); border-radius: 2px; }
+.bv { font-size: .6rem; color: var(--text2); width: 52px; text-align: right; }
+
+/* ── EMPTY STATE ── */
+.empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text3);
+  font-size: .85rem;
+}
+
+/* ── SIDEBAR NAV ── */
+.bottom-nav {
+  width: 220px;
+  flex-shrink: 0;
+  height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 2px 0 8px rgba(0,0,0,.04);
+  padding-top: 0;
+}
+.sidebar-logo {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: .95rem;
+  color: var(--purple);
+  letter-spacing: -.01em;
+  flex-shrink: 0;
+}
+.sidebar-logo span { color: var(--text2); font-weight: 400; margin-left: 4px; font-size: .78rem; }
+.nav-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: .82rem;
+  font-weight: 500;
+  transition: all .15s;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  font-family: var(--sans);
+  padding: 11px 18px;
+  text-align: left;
+  width: 100%;
+}
+.nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.nav-item:hover { color: var(--purple); background: var(--purple-light); }
+.nav-item.active { color: var(--purple); background: var(--purple-light); border-left-color: var(--purple); font-weight: 600; }
+.nav-item.active svg { stroke: var(--purple); }
+.nav-sep { height: 1px; background: var(--border); margin: 6px 0; }
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  font-size: .7rem;
+  color: var(--text3);
+  line-height: 1.7;
+}
+
+/* ── STICKY ACTION (detail) ── */
+.sticky-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  position: sticky;
+  bottom: 0;
+}
+
+/* ── CONTENT AREA ── */
+.content-area {
+  grid-area: content;
+  overflow-y: auto;
+  padding-bottom: 40px;
+}
+.app-body {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+}
+
+/* ── RESPONSIVE ── */
+.table-head, .table-row {
+  grid-template-columns: 80px 1fr 80px 80px 90px 80px 80px 90px;
+}
+.table-head span:nth-child(7),
+.table-row .cell-action { display: block; }
+
+/* ── PAGE PADDING ── */
+.page.active { padding: 24px 28px; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; grid-template-areas: "header" "content"; }
+  .bottom-nav { display: none; }
+  .content-area { padding-bottom: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="app-outer">
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <nav class="bottom-nav" id="sidebarNav">
+    <div class="sidebar-logo">📈 Stock Agent <span>AI</span></div>
+    <button class="nav-item active" data-page="daily" onclick="showPage('daily')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Trang chủ
+    </button>
+    <button class="nav-item" data-page="watchlist" onclick="showPage('watchlist')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Theo dõi
+    </button>
+    <button class="nav-item" data-page="buffett" onclick="showPage('buffett')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Phân tích
+    </button>
+    <div class="sidebar-footer">
+      <div>⏰ Auto scan 7:30 sáng</div>
+      <div id="nextScanTime" style="color:var(--purple);font-weight:600">—</div>
+    </div>
+  </nav>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="app-right">
+
+    <header class="app-header">
+    <div class="avatar">SA</div>
+    <div class="search-wrap" onclick="document.getElementById('globalSearch').focus()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="globalSearch" placeholder="Tìm mã CP (VD: FPT, VNM...)"
+        onkeydown="if(event.key==='Enter')quickSearch(this.value)">
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" onclick="triggerScan()" title="Scan ngay">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>
+      <button class="icon-btn" title="Thông báo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="badge" id="pickBadge">0</span>
+      </button>
+    </div>
+  </header>
+
+    <div class="progress-bar" id="progBar"><div class="progress-fill" style="width:50%"></div></div>
+
+    <!-- Sub-navs -->
+    <nav class="sub-nav" id="subNavDaily">
+  </nav>
+  <nav class="sub-nav" id="subNavBuffett" style="display:none">
+    <div class="sub-tab active">Phân tích</div>
+  </nav>
+  <nav class="sub-nav" id="subNavMarket" style="display:none">
+    <div class="sub-tab active">Bảng giá</div>
+    <div class="sub-tab" onclick="fetchWlBoard()">Từ Watchlist</div>
+  </nav>
+
+    <!-- Pages -->
+    <main class="app-body">
+      <!-- ═══ DAILY PICKS ═══ -->
+    <div class="page active" id="page-daily">
+      <div class="summary-card" id="summaryCard">
+        <div class="summary-top">
+          <div>
+            <div class="summary-label">Score — Watchlist</div>
+            <div class="summary-value" id="sumScore">—</div>
+            <div class="summary-change up" id="sumChange">Chưa scan</div>
+          </div>
+          <button class="btn btn-primary" id="btnScan" onclick="triggerScan()">Scan ngay</button>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-item"><div class="lbl">Top picks</div><div class="val" id="sumTop">0</div></div>
+          <div class="summary-item"><div class="lbl">Theo dõi</div><div class="val" id="sumWatch">0</div></div>
+          <div class="summary-item"><div class="lbl">Tránh</div><div class="val" id="sumAvoid">0</div></div>
+          <div class="summary-item"><div class="lbl">Lần scan</div><div class="val" id="sumTime" style="font-size:.72rem">—</div></div>
+        </div>
+      </div>
+
+      <div id="aiCommentary" class="ai-box" style="display:none"></div>
+      <div id="picksContainer">
+        <div class="empty">Nhấn <strong>Scan ngay</strong> để phân tích watchlist</div>
+      </div>
+    </div>
+
+    <!-- ═══ BUFFETT ═══ -->
+<div class="page" id="page-buffett">
+      <div class="card">
+        <div class="card-title">Kéo dữ liệu BCTC</div>
+        <div class="fetch-row">
+          <div class="fg" style="flex:0 0 110px">
+            <label>Mã CP</label>
+            <input type="text" id="maCP" placeholder="FPT" maxlength="10" style="text-transform:uppercase"
+              onkeydown="if(event.key==='Enter')fetchData()">
+          </div>
+          <div class="fg" style="flex:0 0 70px">
+            <label>Số năm</label>
+            <input type="number" id="soNam" value="5" min="1" max="10">
+          </div>
+          <div class="fg" style="flex:0 0 90px">
+            <label>Kỳ</label>
+            <select id="kyBC"><option value="1">Năm</option><option value="0">Quý</option></select>
+          </div>
+          <button class="btn btn-primary" id="btnFetch" onclick="fetchData()" style="align-self:flex-end">
+            <span id="btnTxt">Kéo dữ liệu</span>
+          </button>
+        </div>
+        <div class="log" id="logBox"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Số liệu tài chính</div>
+        <div class="ig">
+          <div class="igrp"><label>Tên công ty</label><input type="text" id="tenCty" placeholder="Auto"></div>
+          <div class="igrp"><label>Giá hiện tại (nghìn)</label><input type="number" id="giaHT" step="0.1"></div>
+          <div class="igrp"><label>Giá sổ sách (nghìn)</label><input type="number" id="giaSS" step="0.1"></div>
+          <div class="igrp"><label>KL lưu hành (triệu CP)</label><input type="number" id="klLH" step="0.001"></div>
+          <div class="igrp"><label>P/E mục tiêu</label><input type="number" id="peTarget" step="0.5" value="15"></div>
+        </div>
+        <div class="yh">
+          <span>Chỉ tiêu</span>
+          <span id="y0">Y1</span><span id="y1">Y2</span><span id="y2">Y3</span><span id="y3">Y4</span><span id="y4">Y5</span>
+        </div>
+        <div class="sub">Kết quả kinh doanh (triệu VNĐ)</div>
+        <div class="dr"><div class="dr-lbl">Doanh thu thuần</div><input class="dt" id="dt0" type="text" inputmode="numeric"><input class="dt" id="dt1" type="text" inputmode="numeric"><input class="dt" id="dt2" type="text" inputmode="numeric"><input class="dt" id="dt3" type="text" inputmode="numeric"><input class="dt" id="dt4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Lợi nhuận gộp</div><input class="lng" id="lng0" type="text" inputmode="numeric"><input class="lng" id="lng1" type="text" inputmode="numeric"><input class="lng" id="lng2" type="text" inputmode="numeric"><input class="lng" id="lng3" type="text" inputmode="numeric"><input class="lng" id="lng4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Chi phí lãi vay</div><input class="lv" id="lv0" type="text" inputmode="numeric"><input class="lv" id="lv1" type="text" inputmode="numeric"><input class="lv" id="lv2" type="text" inputmode="numeric"><input class="lv" id="lv3" type="text" inputmode="numeric"><input class="lv" id="lv4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">CP bán hàng</div><input class="cpbh" id="cpbh0" type="text" inputmode="numeric"><input class="cpbh" id="cpbh1" type="text" inputmode="numeric"><input class="cpbh" id="cpbh2" type="text" inputmode="numeric"><input class="cpbh" id="cpbh3" type="text" inputmode="numeric"><input class="cpbh" id="cpbh4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">CP QLDN</div><input class="cpql" id="cpql0" type="text" inputmode="numeric"><input class="cpql" id="cpql1" type="text" inputmode="numeric"><input class="cpql" id="cpql2" type="text" inputmode="numeric"><input class="cpql" id="cpql3" type="text" inputmode="numeric"><input class="cpql" id="cpql4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">LN trước thuế</div><input class="lntt" id="lntt0" type="text" inputmode="numeric"><input class="lntt" id="lntt1" type="text" inputmode="numeric"><input class="lntt" id="lntt2" type="text" inputmode="numeric"><input class="lntt" id="lntt3" type="text" inputmode="numeric"><input class="lntt" id="lntt4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Thuế TNDN</div><input class="thue" id="thue0" type="text" inputmode="numeric"><input class="thue" id="thue1" type="text" inputmode="numeric"><input class="thue" id="thue2" type="text" inputmode="numeric"><input class="thue" id="thue3" type="text" inputmode="numeric"><input class="thue" id="thue4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">LN sau thuế</div><input class="lnst" id="lnst0" type="text" inputmode="numeric"><input class="lnst" id="lnst1" type="text" inputmode="numeric"><input class="lnst" id="lnst2" type="text" inputmode="numeric"><input class="lnst" id="lnst3" type="text" inputmode="numeric"><input class="lnst" id="lnst4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">P/E</div><input class="pe" id="pe0" type="text" inputmode="numeric"><input class="pe" id="pe1" type="text" inputmode="numeric"><input class="pe" id="pe2" type="text" inputmode="numeric"><input class="pe" id="pe3" type="text" inputmode="numeric"><input class="pe" id="pe4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Giá sổ sách/CP</div><input class="gssk" id="gssk0" type="text" inputmode="numeric"><input class="gssk" id="gssk1" type="text" inputmode="numeric"><input class="gssk" id="gssk2" type="text" inputmode="numeric"><input class="gssk" id="gssk3" type="text" inputmode="numeric"><input class="gssk" id="gssk4" type="text" inputmode="numeric"></div>
+        <div class="sub">Bảng cân đối (triệu VNĐ)</div>
+        <div class="dr"><div class="dr-lbl">Tiền & tương đương</div><input class="tien" id="tien0" type="text" inputmode="numeric"><input class="tien" id="tien1" type="text" inputmode="numeric"><input class="tien" id="tien2" type="text" inputmode="numeric"><input class="tien" id="tien3" type="text" inputmode="numeric"><input class="tien" id="tien4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Hàng tồn kho</div><input class="htk" id="htk0" type="text" inputmode="numeric"><input class="htk" id="htk1" type="text" inputmode="numeric"><input class="htk" id="htk2" type="text" inputmode="numeric"><input class="htk" id="htk3" type="text" inputmode="numeric"><input class="htk" id="htk4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">TS ngắn hạn</div><input class="tsnh" id="tsnh0" type="text" inputmode="numeric"><input class="tsnh" id="tsnh1" type="text" inputmode="numeric"><input class="tsnh" id="tsnh2" type="text" inputmode="numeric"><input class="tsnh" id="tsnh3" type="text" inputmode="numeric"><input class="tsnh" id="tsnh4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Tổng tài sản</div><input class="ts" id="ts0" type="text" inputmode="numeric"><input class="ts" id="ts1" type="text" inputmode="numeric"><input class="ts" id="ts2" type="text" inputmode="numeric"><input class="ts" id="ts3" type="text" inputmode="numeric"><input class="ts" id="ts4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Nợ ngắn hạn</div><input class="nnh" id="nnh0" type="text" inputmode="numeric"><input class="nnh" id="nnh1" type="text" inputmode="numeric"><input class="nnh" id="nnh2" type="text" inputmode="numeric"><input class="nnh" id="nnh3" type="text" inputmode="numeric"><input class="nnh" id="nnh4" type="text" inputmode="numeric"></div>
+        <div class="dr"><div class="dr-lbl">Nợ dài hạn</div><input class="ndh" id="ndh0" type="text" inputmode="numeric"><input class="ndh" id="ndh1" type="text" inputmode="numeric"><input class="ndh" id="ndh2" type="text" inputmode="numeric"><input class="ndh" id="ndh3" type="text" inputmode="numeric"><input class="ndh" id="ndh4" type="text" inputmode="numeric"></div>
+        <div class="sub">Phát hành CP</div>
+        <div class="dr">
+          <div class="dr-lbl">Tiền thu phát hành cổ phiếu</div>
+          <input class="phcp" id="phcp0" type="text" inputmode="numeric" value="0"><input class="phcp" id="phcp1" type="text" inputmode="numeric" value="0">
+          <input class="phcp" id="phcp2" type="text" inputmode="numeric" value="0"><input class="phcp" id="phcp3" type="text" inputmode="numeric" value="0"><input class="phcp" id="phcp4" type="text" inputmode="numeric" value="0">
+        </div>
+      </div>
+
+      <div class="sticky-actions">
+        <button class="btn-buy" onclick="analyze()">Phân tích</button>
+      </div>
+
+      <div id="results">
+        <div class="score-hero">
+          <div class="big-score" id="sNum">0</div>
+          <div>
+            <div class="score-verdict" id="sVer">—</div>
+            <div style="font-size:.68rem;color:var(--text3)">/14 tiêu chí đạt</div>
+            <div class="score-metas" id="scoreMetas"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">14 tiêu chí phân tích</div>
+          <table class="ct">
+            <thead><tr><th>#</th><th>Tiêu chí</th><th>Ngưỡng</th><th>KQ</th><th>Nhận xét</th></tr></thead>
+            <tbody id="ctBody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title">Giá trị thực — DCF</div>
+          <div class="dcf-box">
+            <div>
+              <div style="font-size:.65rem;color:var(--text3)">Giá trị / CP</div>
+              <div class="dcf-num" id="ivNum">—</div>
+              <div style="font-size:.62rem;color:var(--text3)">nghìn VNĐ</div>
+            </div>
+            <div class="dcf-detail" id="ivDet"></div>
+          </div>
+          <div id="mosSect"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Kết luận</div>
+          <div id="verdictBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ WATCHLIST ═══ -->
+    <div class="page" id="page-watchlist">
+      <div class="summary-card">
+        <div class="summary-label">Danh mục theo dõi</div>
+        <div class="summary-value" id="wlCount" style="font-size:1.4rem">0 mã</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Quản lý watchlist</div>
+        <div class="wl-wrap">
+          <div class="wl-tags" id="wlTags"></div>
+          <div class="wl-add">
+            <input type="text" id="wlInput" placeholder="HPG" maxlength="10" onkeydown="if(event.key==='Enter')addToWl()">
+            <button class="btn btn-primary" onclick="addToWl()">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <p style="font-size:.82rem;color:var(--text2);line-height:1.6;margin-bottom:12px">
+          Watchlist được dùng cho scan tự động lúc 7:30 sáng và scan thủ công.
+        </p>
+        <button class="btn btn-primary" style="width:100%" onclick="triggerScan();showPage('daily')">Scan watchlist ngay</button>
+      </div>
+    </div>
+
+    <!-- ═══ TECHNICAL ═══ -->
+    <div class="page" id="page-technical">
+      <div class="card">
+        <div class="card-title">Phân tích kỹ thuật</div>
+        <div class="fetch-row">
+          <div class="fg" style="flex:0 0 110px">
+            <label>Mã CP</label>
+            <input type="text" id="taMA" placeholder="FPT" maxlength="10" style="text-transform:uppercase"
+              onkeydown="if(event.key==='Enter')fetchTA()">
+          </div>
+          <div class="fg" style="flex:0 0 90px">
+            <label>Ngày</label>
+            <input type="number" id="taPeriod" value="90" min="30" max="365">
+          </div>
+          <button class="btn btn-primary" onclick="fetchTA()" style="align-self:flex-end">Phân tích</button>
+        </div>
+      </div>
+      <div id="taResult" style="display:none">
+        <div class="card"><div class="stat-grid" id="taStats"></div></div>
+        <div class="card">
+          <div class="card-title">Tín hiệu</div>
+          <div id="taSignals"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PRICE BOARD ═══ -->
+    <div class="page" id="page-priceboard">
+      <div class="action-bar">
+        <div class="fg" style="flex:1;margin:0">
+          <input type="text" id="pbTickers" placeholder="VNM,FPT,HPG,MWG,VCB"
+            onkeydown="if(event.key==='Enter')fetchPB()" style="width:100%">
+        </div>
+        <button class="btn btn-primary" onclick="fetchPB()">Tải giá</button>
+      </div>
+      <div id="pbResult"></div>
+    </div>
+    </main>
+
+  </div><!-- /app-right -->
+
+</div><!-- /app -->
+</div><!-- /app-outer -->
+
+<script>
+// ─── DEBUG ───
+window.onerror = function(msg, src, line, col, err) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:monospace;font-size:14px;color:red">'
+    + '<h2>JS Error:</h2><p>' + msg + '</p><p>Line: ' + line + '</p><p>' + (err ? err.stack : '') + '</p></div>';
+  return false;
+};
+// ─── NAV ───
+const SUB_NAVS = {
+  daily: 'subNavDaily',
+  buffett: 'subNavBuffett',
+  watchlist: null,
+  technical: null,
+  priceboard: 'subNavMarket',
+};
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id)?.classList.add('active');
+  document.querySelector(`.bottom-nav [data-page="${id}"]`)?.classList.add('active');
+  Object.values(SUB_NAVS).forEach(sid => {
+    if (sid) document.getElementById(sid).style.display = 'none';
+  });
+  const sub = SUB_NAVS[id];
+  if (sub) document.getElementById(sub).style.display = 'flex';
+}
+
+function quickSearch(val) {
+  const t = val.trim().toUpperCase();
+  if (!t) return;
+  document.getElementById('maCP').value = t;
+  showPage('buffett');
+  fetchData();
+}
+
+// ─── HELPERS ───
+const ts = () => new Date().toLocaleTimeString('vi-VN');
+const g  = id => parseInput(document.getElementById(id)?.value);
+const gA = cls => Array.from(document.querySelectorAll('.' + cls)).map(el => parseInput(el.value));
+
+/** Phân cách hàng nghìn kiểu Việt Nam (1.234.567,8) */
+function fmt(n, dec = 0) {
+  if (n == null || n === '' || isNaN(n) || !isFinite(n)) return '—';
+  return Number(n).toLocaleString('vi-VN', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function fmtPct(n, dec = 1) { return fmt(n, dec) + '%'; }
+function fmtVol(n) {
+  if (n == null || isNaN(n) || !isFinite(n)) return '—';
+  if (Math.abs(n) >= 1e6) return fmt(n / 1e6, 1) + ' tr';
+  if (Math.abs(n) >= 1e3) return fmt(n / 1e3, 0) + ' nghìn';
+  return fmt(n, 0);
+}
+const f2 = n => (isNaN(n) || !isFinite(n)) ? '—' : fmtPct(n * 100, 1);
+const fN = n => fmt(n, 0);
+
+function scoreColor(score) {
+  if (score >= 10) return 'var(--green)';
+  if (score >= 7) return 'var(--yellow)';
+  return 'var(--red)';
+}
+function scoreRowClass(score) {
+  if (score >= 10) return 'row-up';
+  if (score >= 7) return 'row-flat';
+  return 'row-down';
+}
+
+function fmtInput(v) {
+  if (v == null || isNaN(v) || !isFinite(v)) return '0';
+  return Math.round(v).toLocaleString('vi-VN');
+}
+function parseInput(s) {
+  if (s == null || s === '') return 0;
+  s = String(s).trim();
+  if (s === '') return 0;
+  // vi-VN: dấu chấm = phân ngàn, dấu phẩy = thập phân
+  // Xử lý: xoá tất cả dấu chấm, đổi phẩy → chấm
+  if (s.includes(',')) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  // Không có phẩy — chỉ có dấu chấm
+  // Nếu có nhiều dấu chấm → tất cả là phân ngàn
+  if ((s.match(/\./g) || []).length > 1) {
+    return parseFloat(s.replace(/\./g, '')) || 0;
+  }
+  // 1 dấu chấm: xem phần sau chấm
+  const parts = s.split('.');
+  if (parts.length === 2) {
+    // Nếu phần sau chấm = 3 chữ số VÀ phần trước chấm ≤ 3 chữ số → thập phân (vd: 58.137 tỷ)
+    // Thousands separator vi-VN luôn có đúng 3 chữ số sau dấu chấm
+    // → < 3 chữ số sau chấm = thập phân thật sự (71.6, 2089.96, 58.137...)
+    if (parts[1].length < 3) {
+      return parseFloat(s) || 0; // thập phân
+    }
+    // 3 chữ số sau chấm: nếu phần trước ≤ 2 chữ số → thập phân (58.137 tỷ)
+    if (parts[0].length <= 2) {
+      return parseFloat(s) || 0;
+    }
+    return parseFloat(s.replace(/\./g, '')) || 0; // phân ngàn vi-VN (698.143, 1.234.567)
+  }
+  return parseFloat(s) || 0;
+}
+function hi(id, v) {
+  const el = document.getElementById(id);
+  if (!el || v == null) return;
+  // type=number chỉ chấp nhận dấu chấm thập phân, không dùng vi-VN
+  el.value = el.type === 'number' ? (Math.round(v * 1000) / 1000) : fmtInput(v);
+  el.classList.add('hi');
+  setTimeout(() => el.classList.remove('hi'), 1800);
+}
+function hiArr(cls, arr) { arr.forEach((v, i) => hi(cls + i, v)); }
+
+function log(msg, type = 'info') {
+  const b = document.getElementById('logBox');
+  b.classList.add('show');
+  b.innerHTML += `<div class="log-${type}">[${ts()}] ${msg}</div>`;
+  b.scrollTop = b.scrollHeight;
+}
+
+// ─── DAILY PICKS ───
+let picksData = null;
+let currentPickTab = 'top';
+
+async function loadDailyPicks() {
+  const container = document.getElementById('picksContainer');
+  try {
+    // Kiểm tra watchlist trước
+    const wlRes = await fetch('/api/watchlist');
+    const wlData = await wlRes.json();
+    const watchlist = wlData.watchlist || [];
+
+    if (!watchlist.length) {
+      updateSummary({});
+      return;
+    }
+
+    const r = await fetch('/api/daily-picks');
+    const d = await r.json();
+    picksData = d;
+    renderPicks();
+    updateSummary(d);
+    loadAiPicks();
+  } catch (e) {
+    container.innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`;
+  }
+}
+
+async function loadAiPicks() {
+  try {
+    const r = await fetch('/api/ai-picks');
+    const d = await r.json();
+    const box = document.getElementById('aiCommentary');
+    if (d.commentary) {
+      box.style.display = 'block';
+      box.innerHTML = d.commentary.replace(/\n/g, '<br>');
+    }
+  } catch {}
+}
+
+function updateSummary(d) {
+  const tops = d.top_picks || [];
+  const watch = d.watchable || [];
+  const avg = tops.length
+    ? tops.reduce((s, t) => s + (t.score || 0), 0) / tops.length
+    : null;
+  document.getElementById('sumScore').textContent = avg != null ? fmt(avg, 1) + '/14' : '—';
+  const avoid = d.avoid || [];
+  document.getElementById('sumChange').innerHTML = tops.length
+    ? `${tops.length} mã đạt chuẩn`
+    : `Thêm mã vào <a href="#" onclick="showPage('watchlist');return false;" style="color:var(--purple);text-decoration:underline;font-weight:600">Watchlist</a> rồi nhấn Scan ngay`;
+  document.getElementById('sumChange').className = 'summary-change ' + (tops.length ? 'up' : 'flat');
+  document.getElementById('sumTop').textContent = fmt(tops.length);
+  document.getElementById('sumWatch').textContent = fmt(watch.length);
+  document.getElementById('sumAvoid').textContent = fmt(avoid.length);
+  document.getElementById('sumTime').textContent = d.scanned_at
+    ? new Date(d.scanned_at).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+    : '—';
+  document.getElementById('pickBadge').textContent = fmt(tops.length || 0);
+}
+
+function switchPicks(tab, el) {
+  document.querySelectorAll('#subNavDaily .sub-tab').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  currentPickTab = tab;
+  renderPicks();
+}
+
+function renderPicks() {
+  if (!picksData) return;
+  // Gộp tất cả mã từ watchlist đã scan, sort theo score giảm dần
+  const list = [
+    ...(picksData.top_picks || []),
+    ...(picksData.watchable || []),
+    ...(picksData.avoid || []),
+  ].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const container = document.getElementById('picksContainer');
+
+  if (!list.length) {
+    container.innerHTML = `<div class="empty">Chưa có dữ liệu — nhấn <strong>Scan ngay</strong> để bắt đầu.</div>`;
+    return;
+  }
+
+  let html = `
+    <div class="data-table">
+      <div class="table-head">
+        <span>Mã</span><span>Score</span><span>ROE</span><span>%</span><span>Biên gộp</span><span>Giá</span>
+      </div>`;
+
+  list.forEach(t => {
+    const km = t.key_metrics || {};
+    const clr = scoreColor(t.score);
+    const fillW = Math.round((t.score / 14) * 100);
+    const rowCls = scoreRowClass(t.score);
+    html += `
+      <div class="table-row ${rowCls}" onclick="openInBuffett('${t.ticker}')">
+        <div>
+          <div class="sym">${t.ticker}</div>
+          <div class="sub">${t.cagr_lntt != null ? 'CAGR ' + fmtPct(t.cagr_lntt) : 'Score'}</div>
+        </div>
+        <div class="cell">
+          <div class="score-mini">
+            <div class="score-track"><div class="score-fill" style="width:${fillW}%;background:${clr}"></div></div>
+            <span class="score-txt" style="color:${clr}">${fmt(t.score)}/14</span>
+          </div>
+        </div>
+        <div class="cell">${km.roe != null ? fmtPct(km.roe) : '—'}</div>
+        <div class="cell cell-sm">${km.pe > 0 ? fmt(km.pe, 1) + 'x' : '—'}</div>
+        <div class="cell">${km.gross_margin != null ? fmtPct(km.gross_margin) : '—'}</div>
+        <div class="cell vol">${t.price > 0 ? fmt(t.price, 1) : '—'}</div>
+      </div>`;
+  });
+
+  container.innerHTML = html + '</div>';
+}
+
+async function triggerScan() {
+  const btn = document.getElementById('btnScan');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang scan...'; }
+  document.getElementById('progBar').classList.add('show');
+
+  try {
+    const r = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    picksData = d;
+    renderPicks();
+    updateSummary(d);
+    loadAiPicks();
+  } catch (e) {
+    alert('Lỗi scan: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Scan ngay'; }
+    document.getElementById('progBar').classList.remove('show');
+  }
+}
+
+function openInBuffett(ticker) {
+  document.getElementById('maCP').value = ticker;
+  showPage('buffett');
+  fetchData();
+}
+
+// ─── FETCH DATA ───
+async function fetchData() {
+  const ma = document.getElementById('maCP').value.trim().toUpperCase();
+  if (!ma) { alert('Nhập mã CP!'); return; }
+  const n = document.getElementById('soNam').value || 5;
+  const ky = document.getElementById('kyBC').value;
+
+  const btn = document.getElementById('btnFetch');
+  btn.disabled = true;
+  document.getElementById('btnTxt').innerHTML = '<span class="spinner"></span>Đang kéo...';
+  document.getElementById('logBox').innerHTML = '';
+  // Xóa kết quả phân tích cũ khi kéo dữ liệu mới
+  document.getElementById('results').classList.remove('show');
+  log(`Kéo dữ liệu <strong>${ma}</strong>...`);
+
+  try {
+    const res = await fetch(`/api/fetch/${ma}?yearly=${ky}&n=${n}`);
+    const d = await res.json();
+    if (!d.ok && !d.income_ok && !d.balance_ok) throw new Error(d.message || 'Không tìm thấy dữ liệu');
+
+    if (d.years) d.years.forEach((y, i) => { const el = document.getElementById('y' + i); if (el) el.textContent = y; });
+    ['dt','lng','lv','cpbh','cpql','lntt','thue','lnst','pe','gssk','tien','htk','tsnh','ts','nnh','ndh','phcp']
+      .forEach(f => { if (d.data[f]) hiArr(f, d.data[f]); });
+    // Lưu VCSH, ROE/ROA và EPS từ server
+    window._vcshData  = d.data?.vcsh       || null;
+    window._roeArr    = d.data?.roe_arr    || null;
+    window._roaArr    = d.data?.roa_arr    || null;
+    window._epsRatio  = d.data?.eps_ratio  || null; // VND/CP từ ratio table
+    if (d.overview) {
+      hi('tenCty', d.overview.ten_cty);
+      if (d.overview.gia_hien_tai) hi('giaHT', d.overview.gia_hien_tai);
+      if (d.overview.kl_luu_hanh)  hi('klLH',  d.overview.kl_luu_hanh);
+    }
+    if (d.errors?.length) d.errors.forEach(e => log(`⚠ ${e}`, 'info'));
+    log(`Hoàn tất — ${d.overview?.ten_cty || ma}`, 'ok');
+  } catch (err) {
+    log(err.message, 'err');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('btnTxt').textContent = 'Kéo dữ liệu';
+  }
+}
+
+// ─── ANALYZE ───
+function analyze() {
+  const ma = (document.getElementById('maCP').value || 'CP').toUpperCase();
+  const ten = document.getElementById('tenCty').value || ma;
+  const giaHT = g('giaHT'), giaSS = g('giaSS'), klLH = g('klLH');
+  const peTarget = g('peTarget') || 15;
+  const yrs = Array.from({length:5}, (_, i) => document.getElementById('y'+i)?.textContent || String(2020+i));
+  const N = 4;
+
+  const dt=gA('dt'),lng=gA('lng'),lv=gA('lv'),cpbh=gA('cpbh'),cpql=gA('cpql');
+  const lntt=gA('lntt'),thue=gA('thue'),lnst=gA('lnst'),pe=gA('pe');
+  const gssk=gA('gssk'),tien=gA('tien'),htk=gA('htk'),tsnh=gA('tsnh'),ts=gA('ts');
+  const nnh=gA('nnh'),ndh=gA('ndh'),phcp=gA('phcp');
+
+  const totNo=nnh.map((v,i)=>v+ndh[i]);
+  // Ưu tiên VCSH trực tiếp từ BCTC, fallback tính từ TS - Nợ
+  const vcsh_raw = window._vcshData && window._vcshData.length===ts.length
+    ? window._vcshData.map((v,i)=> v && v!==0 ? v : ts[i]-totNo[i])
+    : ts.map((v,i)=>v-totNo[i]);
+  // Dùng bình quân đầu kỳ + cuối kỳ (khớp với SSI)
+  const avg_vcsh = vcsh_raw.map((v,i)=>i>0&&vcsh_raw[i-1]!==0?(v+vcsh_raw[i-1])/2:v);
+  const avg_ts   = ts.map((v,i)=>i>0&&ts[i-1]!==0?(v+ts[i-1])/2:v);
+  const vcsh=vcsh_raw;
+  // Ưu tiên ratio từ vnstock (khớp SSI), fallback tính từ BCTC
+  const _rr = window._roeArr, _ra = window._roaArr;
+  // roe_arr từ server là % (27.24), chia 100 ra dạng thập phân để dùng chung với fmtPct
+  const roe = (_rr && _rr.length===lnst.length && _rr.some(v=>v))
+    ? _rr.map(v => v != null ? v/100 : NaN)
+    : lnst.map((v,i)=>avg_vcsh[i]>0?v/avg_vcsh[i]:NaN);
+  const roa = (_ra && _ra.length===lnst.length && _ra.some(v=>v))
+    ? _ra.map(v => v != null ? v/100 : NaN)
+    : lnst.map((v,i)=>avg_ts[i]>0?v/avg_ts[i]:NaN);
+  const gm=lng.map((v,i)=>dt[i]>0?v/dt[i]:NaN);
+  const lvR=lv.map((v,i)=>lng[i]>0?Math.abs(v)/lng[i]:NaN);
+  const cpbhR=cpbh.map((v,i)=>dt[i]>0?Math.abs(v)/dt[i]:NaN);
+  const cpqlR=cpql.map((v,i)=>lng[i]>0?Math.abs(v)/lng[i]:NaN);
+  const htkR=htk.map((v,i)=>tsnh[i]>0?v/tsnh[i]:NaN);
+  const noR=totNo.map((v,i)=>ts[i]>0?v/ts[i]:NaN);
+  const ttnR=tien.map((v,i)=>nnh[i]>0?v/nnh[i]:NaN);
+
+  const isC=a=>{let d=0;for(let i=1;i<a.length;i++)if(a[i]<a[i-1])d++;return d<=1};
+  // Tìm năm đầu tiên có data thật (≠0) để tính CAGR, tránh lỗi khi năm đầu bị pad = 0
+  const firstIdx = lnst.findIndex(v => v > 0);
+  const cagr = firstIdx >= 0 && firstIdx < N && lnst[N] > 0
+    ? Math.pow(lnst[N] / lnst[firstIdx], 1 / (N - firstIdx)) - 1
+    : NaN;
+  // Định giá đơn giản: EPS × P/E mục tiêu
+  // Ưu tiên EPS từ ratio table (VND), fallback tính từ LNST/KL
+  const _eps = window._epsRatio;
+  const epsVND = (_eps && _eps[N] && _eps[N] > 0) ? _eps[N]
+    : (klLH > 0 && lnst[N] > 0 ? lnst[N] / (klLH * 1e6) * 1e6 : NaN);
+  const epsNghin = isNaN(epsVND) ? NaN : epsVND / 1000;
+  const iv = isNaN(epsNghin) ? NaN : epsNghin * peTarget;
+
+  let score=0; const rows=[];
+  const add=(n,label,thr,res,pass,rem,cd,cd2,cd3)=>{if(pass===true)score++;rows.push({n,label,thr,res,pass,rem,cd,cd2,cd3})};
+
+  const dC=isC(dt),lC=isC(lng);
+  add(1,'Tăng trưởng nhất quán doanh thu & lợi nhuận gộp','Nhất quán',`DT:${dC?'✓':'✗'} LN gộp:${lC?'✓':'✗'}`,dC||lC,
+    dC&&lC?'Cả hai nhất quán':'Một chỉ số nhất quán',{y:yrs,v:dt,f:v=>fmt(v/1000,0)+' tỷ',label:'Doanh thu'},{y:yrs,v:lng,f:v=>fmt(v/1000,0)+' tỷ',label:'LN gộp'});
+  const gmL=gm[N]||0;
+  add(2,'Biên LN Gộp ≥20%','≥20%',f2(gmL),gmL>=0.20,gmL>=0.30?'Siêu hạng':gmL>=0.20?'Đạt chuẩn':'Thấp',{y:yrs,v:gm,f:v=>fmtPct(v*100),label:'Biên LN gộp'});
+  const lvL=lvR[N]||999;
+  add(3,'Lãi vay / Lợi nhuận gộp ≤40%','≤40%',f2(lvL),!isNaN(lvL)&&lvL<=0.40,lvL<=0.40?'OK':'Cao',
+    {y:yrs,v:lv,f:v=>fmt(Math.abs(v)/1000,0)+' tỷ',label:'Lãi vay (tỷ)'},
+    {y:yrs,v:lng,f:v=>fmt(v/1000,0)+' tỷ',label:'LN gộp (tỷ)'},
+    {y:yrs,v:lvR,f:v=>fmtPct(v*100),label:'LV / LN gộp'});
+  add(4,'ROA < ROE','ROA < ROE',`ROA ${f2(roa[N])} / ROE ${f2(roe[N])}`,!isNaN(roa[N])&&!isNaN(roe[N])&&roa[N]<roe[N],`ROA ${f2(roa[N])} < ROE ${f2(roe[N])}`,{y:yrs,v:roa,f:v=>fmtPct(v*100),label:'ROA'},{y:yrs,v:roe,f:v=>fmtPct(v*100),label:'ROE'});
+  add(5,'ROE ≥ 20%','≥20%',f2(roe[N]),!isNaN(roe[N])&&roe[N]>=0.20,roe[N]>=0.20?'Đạt chuẩn':'Dưới chuẩn',{y:yrs,v:roe,f:v=>fmtPct(v*100),label:'ROE'});
+  add(6,'Chi phí bán hàng / Doanh thu nhất quán','Ổn định',f2(cpbhR[N]),isC(cpbhR.map(v=>-v)),'Theo dõi',
+    {y:yrs,v:cpbh,f:v=>fmt(Math.abs(v)/1000,0)+' tỷ',label:'CPBH (tỷ)'},
+    {y:yrs,v:dt,f:v=>fmt(v/1000,0)+' tỷ',label:'Doanh thu (tỷ)'},
+    {y:yrs,v:cpbhR,f:v=>fmtPct(v*100),label:'CPBH / DT'});
+  // P/E: ưu tiên từ data, fallback = giá / EPS ratio
+  let peArr = [...pe];
+  if ((!peArr[N] || peArr[N]<=0) && giaHT>0 && !isNaN(epsNghin) && epsNghin>0) {
+    peArr[N] = giaHT / epsNghin;
+  }
+  const peL = peArr[N] || 0;
+  add(7,'P/E ≤ 10','≤10',peL>0?fmt(peL,1)+'x':'—',!isNaN(peL)&&peL>0&&peL<=10,peL<=10?'Vùng mua':'Cao',{y:yrs,v:peArr,f:v=>fmt(v,1)+'x',label:'P/E'});
+  const cpqlL=cpqlR[N]||999;
+  add(8,'Chi phí quản lý / Lợi nhuận gộp ≤20%','≤20%',f2(cpqlL),!isNaN(cpqlL)&&cpqlL<=0.20,'QLDN',
+    {y:yrs,v:cpql,f:v=>fmt(Math.abs(v)/1000,0)+' tỷ',label:'CPQLDN (tỷ)'},
+    {y:yrs,v:lng,f:v=>fmt(v/1000,0)+' tỷ',label:'LN gộp (tỷ)'},
+    {y:yrs,v:cpqlR,f:v=>fmtPct(v*100),label:'CPQL / LN gộp'});
+  add(9,'Tài sản ngắn hạn ≥ Nợ ngắn hạn','TS ngắn hạn ≥ Nợ ngắn hạn',`TSNH: ${fmt(tsnh[N]/1000,0)}tỷ / NNH: ${fmt(nnh[N]/1000,0)}tỷ`,tsnh[N]>=nnh[N],tsnh[N]>=nnh[N]?'Đủ khả năng thanh toán':'Cần theo dõi thanh khoản',{y:yrs,v:tsnh,f:v=>fmt(v/1000,0)+' tỷ',label:'TS ngắn hạn'},{y:yrs,v:nnh,f:v=>fmt(v/1000,0)+' tỷ',label:'Nợ ngắn hạn'});
+  const ttnL=ttnR[N]||0;
+  add(10,'Tiền mặt / Nợ ngắn hạn ≥ 1x','≥1x',fmt(ttnL,2)+'x',!isNaN(ttnL)&&ttnL>=1,'Thanh khoản',
+    {y:yrs,v:tien,f:v=>fmt(v/1000,0)+' tỷ',label:'Tiền mặt (tỷ)'},
+    {y:yrs,v:nnh,f:v=>fmt(v/1000,0)+' tỷ',label:'Nợ ngắn hạn (tỷ)'},
+    {y:yrs,v:ttnR,f:v=>fmt(v,2)+'x',label:'Tiền / NNH'});
+  add(11,'Nợ dài hạn ≤ 4× Lợi nhuận trước thuế','≤4×',`NDH: ${fmt(ndh[N]/1000,0)}tỷ / LNTT: ${fmt(lntt[N]/1000,0)}tỷ`,ndh[N]<=4*lntt[N],ndh[N]<=4*lntt[N]?'Có thể trả trong 4 năm':'NDH quá lớn so với lợi nhuận',{y:yrs,v:ndh,f:v=>fmt(v/1000,0)+' tỷ',label:'Nợ dài hạn'},{y:yrs,v:lntt,f:v=>fmt(v/1000,0)+' tỷ',label:'LN trước thuế'});
+  add(12,'Tiền ≥ Tổng Nợ','Tiền mặt ≥ Tổng nợ',`Tiền: ${fmt(tien[N]/1000,0)}tỷ / Nợ: ${fmt(totNo[N]/1000,0)}tỷ`,tien[N]>=totNo[N],tien[N]>=totNo[N]?'Tiền mặt đủ trả toàn bộ nợ':'Tiền mặt chưa đủ trả hết nợ',{y:yrs,v:tien,f:v=>fmt(v/1000,0)+' tỷ',label:'Tiền mặt'},{y:yrs,v:totNo,f:v=>fmt(v/1000,0)+' tỷ',label:'Tổng nợ'});
+  add(13,'Hàng tồn kho / Tài sản ngắn hạn ≤40%','≤40%',f2(htkR[N]),!isNaN(htkR[N])&&htkR[N]<=0.40,'Hàng tồn kho',
+    {y:yrs,v:htk,f:v=>fmt(v/1000,0)+' tỷ',label:'HTK (tỷ)'},
+    {y:yrs,v:tsnh,f:v=>fmt(v/1000,0)+' tỷ',label:'TS ngắn hạn (tỷ)'},
+    {y:yrs,v:htkR,f:v=>fmtPct(v*100),label:'HTK / TSNH'});
+  add(14,'Không phát hành CP','Không phát hành',phcp.every(v=>v===0)?'OK':'Có PH',phcp.every(v=>v===0),'Pha loãng',
+    {y:yrs,v:phcp,f:v=>v>0?fmt(v/1000,0)+' tỷ':'—',label:'Giá trị phát hành (tỷ)'});
+
+  document.getElementById('results').classList.add('show');
+  document.getElementById('results').scrollIntoView({behavior:'smooth'});
+
+  const colorScore = scoreColor(score);
+  const sEl = document.getElementById('sNum');
+  sEl.textContent = score;
+  sEl.style.color = colorScore;
+
+  const vM = [{m:12,t:'Xuất sắc'},{m:9,t:'Tốt'},{m:6,t:'Cần nghiên cứu'},{m:0,t:'Rủi ro cao'}];
+  const vv = vM.find(x => score >= x.m);
+  document.getElementById('sVer').textContent = vv.t;
+  document.getElementById('sVer').style.color = colorScore;
+
+  document.getElementById('scoreMetas').innerHTML = [
+    {l:'P/E',v:peL>0?fmt(peL,1)+'x':'—',c:peL<=10?'cg':peL<=15?'cy':'cr'},
+    {l:'ROE',v:f2(roe[N]),c:roe[N]>=0.20?'cg':'cr'},
+    {l:'Biên gộp',v:f2(gm[N]),c:gm[N]>=0.30?'cg':gm[N]>=0.20?'cy':'cr'},
+    {l:'Nợ/TS',v:f2(noR[N]),c:noR[N]<=0.20?'cg':noR[N]<=0.40?'cy':'cr'},
+  ].map(({l,v,c})=>`<div class="sm"><div class="sv ${c}">${v}</div><div class="sl">${l}</div></div>`).join('');
+
+  const tb = document.getElementById('ctBody'); tb.innerHTML = '';
+  rows.forEach(r => {
+    // Dựng bảng: cột = năm, dòng = từng đại lượng
+    let bar = '';
+    const series = [r.cd, r.cd2, r.cd3].filter(Boolean);
+    if (series.length > 0) {
+      const activeYrs = series[0].y.map((y,i) => ({y, i}))
+        .filter(({i}) => series.some(s => {
+          const v = s.v[i]; return v != null && !isNaN(v) && isFinite(v) && v !== 0;
+        }));
+      if (activeYrs.length > 0) {
+        // header: tên chỉ số | năm1 | năm2 ...
+        let tbl = `<div style="margin-top:6px;overflow-x:auto">
+          <table style="font-size:.68rem;border-collapse:collapse;width:100%">
+          <thead><tr>
+            <th style="text-align:left;padding:2px 8px 2px 0;color:var(--text3);font-weight:500;white-space:nowrap"></th>`;
+        activeYrs.forEach(({y}) => {
+          tbl += `<th style="padding:2px 6px;color:var(--text3);font-weight:500;text-align:right">${y}</th>`;
+        });
+        tbl += `</tr></thead><tbody>`;
+        series.forEach((s, si) => {
+          const isLast = si === series.length - 1 && series.length > 1;
+          tbl += `<tr style="${isLast?'border-top:1px solid var(--border)':''}">
+            <td style="padding:3px 8px 3px 0;color:var(--text3);white-space:nowrap;font-weight:${isLast?'600':'400'}">${s.label||''}</td>`;
+          activeYrs.forEach(({i}) => {
+            const v = s.v[i];
+            const display = (v == null || isNaN(v) || !isFinite(v) || v === 0) ? '—' : s.f(v);
+            tbl += `<td style="padding:3px 6px;text-align:right;color:var(--text2);font-weight:${isLast?'600':'400'}">${display}</td>`;
+          });
+          tbl += `</tr>`;
+        });
+        tbl += `</tbody></table></div>`;
+        bar = tbl;
+      }
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="color:var(--text3);font-size:.68rem">${r.n}</td>
+      <td>${r.label}</td><td style="color:var(--text3);font-size:.72rem">${r.thr}</td>
+      <td><span class="pill ${r.pass?'pp':'pf'}">${r.pass?'Đạt':'Chưa'}</span></td>
+      <td style="color:var(--text2);font-size:.76rem">${r.rem}${bar}</td>`;
+    tb.appendChild(tr);
+  });
+
+  document.getElementById('ivNum').textContent = isNaN(iv) ? '—' : fmt(iv, 1);
+  document.getElementById('ivNum').style.color = (!isNaN(iv) && giaHT < iv) ? 'var(--green)' : 'var(--red)';
+  document.getElementById('ivDet').innerHTML = isNaN(iv) ? '<p>Chưa đủ dữ liệu.</p>' : `
+    <p>EPS: <strong>${fmt(epsNghin, 2)} nghìn</strong> · P/E mục tiêu: <strong>${peTarget}x</strong></p>
+    <p>Giá hiện tại <strong>${fmt(giaHT, 1)} nghìn</strong></p>`;
+
+  const mos = (!isNaN(iv) && iv > 0) ? (iv - giaHT) / iv * 100 : 0;
+  document.getElementById('mosSect').innerHTML = (!isNaN(iv) && iv > 0) ? `
+    <div style="font-size:.65rem;color:var(--text3)">Margin of Safety: ${mos > 0 ? '+' : ''}${fmtPct(mos)}</div>
+    <div class="mos-bar"><div class="mos-fill" style="width:${Math.min(100,Math.max(0,mos))}%;background:${mos>=30?'var(--green)':mos>=0?'var(--yellow)':'var(--red)'}"></div></div>` : '';
+
+  document.getElementById('verdictBox').innerHTML = `
+    <div style="padding:14px;background:#F8F9FB;border-radius:8px;border-left:3px solid ${colorScore}">
+      <div style="font-weight:700;color:${colorScore};margin-bottom:6px">${vv.t} — ${score}/14</div>
+      <p style="font-size:.82rem;color:var(--text2);line-height:1.6"><strong>${ten} (${ma})</strong></p>
+    </div>
+    <p class="note">Không phải lời khuyên đầu tư chính thức.</p>`;
+}
+
+// ─── WATCHLIST ───
+async function loadWatchlist() {
+  try {
+    const r = await fetch('/api/watchlist');
+    const d = await r.json();
+    renderWlTags(d.watchlist || []);
+  } catch {}
+}
+
+function renderWlTags(wl) {
+  document.getElementById('wlTags').innerHTML = wl.map(t =>
+    `<div class="wl-tag">${t}<span class="wl-tag-x" onclick="removeWl('${t}')">×</span></div>`
+  ).join('');
+  document.getElementById('wlCount').textContent = fmt(wl.length) + ' mã';
+}
+
+async function addToWl() {
+  const inp = document.getElementById('wlInput');
+  const t = inp.value.trim().toUpperCase();
+  if (!t) return;
+  inp.value = '';
+  try {
+    const r = await fetch('/api/watchlist/add', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ticker: t})
+    });
+    const d = await r.json();
+    renderWlTags(d.watchlist || []);
+  } catch(e) { alert('Lỗi: ' + e.message); }
+}
+
+async function removeWl(ticker) {
+  try {
+    const r = await fetch('/api/watchlist/' + ticker, {method: 'DELETE'});
+    const d = await r.json();
+    renderWlTags(d.watchlist || []);
+  } catch {}
+}
+
+// ─── TECHNICAL ───
+async function fetchTA() {
+  const ma = document.getElementById('taMA').value.trim().toUpperCase();
+  const period = document.getElementById('taPeriod').value || 90;
+  if (!ma) { alert('Nhập mã CP!'); return; }
+  try {
+    const r = await fetch(`/api/technical/${ma}?period=${period}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Lỗi');
+    const l = d.latest;
+    const stats = [
+      {v: l.close ? fmt(l.close / 1000, 2) : '—', l:'Giá', cls:''},
+      {v: l.rsi ? fmt(l.rsi, 1) : '—', l:'RSI', cls: l.rsi < 30 ? 'cg' : l.rsi > 70 ? 'cr' : 'cy'},
+      {v: l.macd ? fmt(l.macd, 2) : '—', l:'MACD', cls: l.macd > l.macd_signal ? 'cg' : 'cr'},
+      {v: l.ma20 ? fmt(l.ma20 / 1000, 2) : '—', l:'MA20', cls:''},
+      {v: l.ma50 ? fmt(l.ma50 / 1000, 2) : '—', l:'MA50', cls:''},
+      {v: fmt(d.signals.length) + ' tín hiệu', l:'Tín hiệu', cls: d.signals.length ? 'cg' : ''},
+    ];
+    document.getElementById('taStats').innerHTML = stats.map(s =>
+      `<div class="stat"><div class="stat-val ${s.cls}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`
+    ).join('');
+    document.getElementById('taSignals').innerHTML = d.signals.length
+      ? d.signals.map(s => `<div style="padding:10px;background:var(--green-bg);border-radius:8px;margin-bottom:6px;font-size:.82rem;color:var(--green)">${s}</div>`).join('')
+      : '<div class="empty" style="padding:20px">Không có tín hiệu rõ ràng</div>';
+    document.getElementById('taResult').style.display = 'block';
+  } catch(e) { alert('Lỗi: ' + e.message); }
+}
+
+// ─── PRICE BOARD ───
+async function fetchWlBoard() {
+  const wl = await fetch('/api/watchlist').then(r => r.json());
+  document.getElementById('pbTickers').value = (wl.watchlist || []).join(',');
+  fetchPB();
+}
+
+async function fetchPB() {
+  const tickers = document.getElementById('pbTickers').value.trim();
+  if (!tickers) { alert('Nhập mã CP!'); return; }
+  try {
+    const r = await fetch('/api/price-board?tickers=' + encodeURIComponent(tickers));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Lỗi');
+
+    let html = `<div class="data-table">
+      <div class="table-head">
+        <span>Mã</span><span>Giá</span><span>+/-</span><span>%</span><span>KL</span><span>Cao</span>
+      </div>`;
+
+    d.data.forEach(t => {
+      const chg = t.change;
+      const rowCls = chg > 0 ? 'row-up' : chg < 0 ? 'row-down' : 'row-flat';
+      const sign = chg > 0 ? '+' : '';
+      html += `
+        <div class="table-row ${rowCls}" onclick="openInBuffett('${t.ticker}')">
+          <div><div class="sym">${t.ticker}</div></div>
+          <div class="cell">${t.price ? fmt(t.price / 1000, 2) : '—'}</div>
+          <div class="cell cell-sm">${sign}${chg != null ? fmt(chg, 2) : '—'}</div>
+          <div class="cell">${sign}${chg != null ? fmtPct(chg) : '—'}</div>
+          <div class="cell vol">${t.volume ? fmtVol(t.volume) : '—'}</div>
+          <div class="cell vol">${t.high ? fmt(t.high / 1000, 2) : '—'}</div>
+        </div>`;
+    });
+    document.getElementById('pbResult').innerHTML = html + '</div>';
+  } catch(e) {
+    document.getElementById('pbResult').innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`;
+  }
+}
+
+// ─── INIT ───
+loadWatchlist();
+loadDailyPicks();
+</script>
+</body>
+</html>
