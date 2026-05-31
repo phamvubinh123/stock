@@ -1340,11 +1340,14 @@ function analyze() {
     {y:yrs,v:ttnR,f:v=>fmt(v,2)+'x',label:'Tiền / NNH'});
   add(11,'Nợ dài hạn ≤ 4× Lợi nhuận trước thuế','≤4×',`NDH: ${fmt(ndh[N]/1000,0)}tỷ / LNTT: ${fmt(lntt[N]/1000,0)}tỷ`,ndh[N]<=4*lntt[N],ndh[N]<=4*lntt[N]?'Có thể trả trong 4 năm':'NDH quá lớn so với lợi nhuận',{y:yrs,v:ndh,f:v=>fmt(v/1000,0)+' tỷ',label:'Nợ dài hạn'},{y:yrs,v:lntt,f:v=>fmt(v/1000,0)+' tỷ',label:'LN trước thuế'});
   add(12,'Tiền ≥ Tổng Nợ','Tiền mặt ≥ Tổng nợ',`Tiền: ${fmt(tien[N]/1000,0)}tỷ / Nợ: ${fmt(totNo[N]/1000,0)}tỷ`,tien[N]>=totNo[N],tien[N]>=totNo[N]?'Tiền mặt đủ trả toàn bộ nợ':'Tiền mặt chưa đủ trả hết nợ',{y:yrs,v:tien,f:v=>fmt(v/1000,0)+' tỷ',label:'Tiền mặt'},{y:yrs,v:totNo,f:v=>fmt(v/1000,0)+' tỷ',label:'Tổng nợ'});
-  add(13,'Hàng tồn kho / Tài sản ngắn hạn ≤40%','≤40%',f2(htkR[N]),!isNaN(htkR[N])&&htkR[N]<=0.40,'Hàng tồn kho',
+  add(13,'Hàng tồn kho / Tài sản ngắn hạn ≤40%','≤40%',f2(htkR[N]),!isNaN(htkR[N])&&htkR[N]<=0.40,
+    `HTK: ${fmt(htk[N]/1000,0)} tỷ · TSNH: ${fmt(tsnh[N]/1000,0)} tỷ · Tỷ lệ: ${fmtPct(htkR[N]*100)}`,
     {y:yrs,v:htk,f:v=>fmt(v/1000,0)+' tỷ',label:'HTK (tỷ)'},
     {y:yrs,v:tsnh,f:v=>fmt(v/1000,0)+' tỷ',label:'TS ngắn hạn (tỷ)'},
     {y:yrs,v:htkR,f:v=>fmtPct(v*100),label:'HTK / TSNH'});
-  add(14,'Không phát hành CP','Không phát hành',phcp.every(v=>v===0)?'OK':'Có PH',phcp.every(v=>v===0),'Pha loãng',
+  const phcpTotal = phcp.reduce((a,b)=>a+b,0);
+  add(14,'Không phát hành CP','Không phát hành',phcp.every(v=>v===0)?'OK':'Có PH',phcp.every(v=>v===0),
+    phcpTotal > 0 ? `Đã phát hành ${fmt(phcpTotal/1000,0)} tỷ trong ${phcp.filter(v=>v>0).length} năm` : 'Không phát hành thêm CP',
     {y:yrs,v:phcp,f:v=>v>0?fmt(v/1000,0)+' tỷ':'—',label:'Giá trị phát hành (tỷ)'});
 
   document.getElementById('results').classList.add('show');
