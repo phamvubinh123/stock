@@ -848,7 +848,7 @@ body {
       </div>
 
       <div class="sticky-actions">
-        <button class="btn-buy" onclick="analyze()">Phân tích</button>
+        <button class="btn-buy" id="btnAnalyze" onclick="analyze()" disabled style="opacity:.45;cursor:not-allowed">Phân tích</button>
       </div>
 
       <div id="results">
@@ -1224,6 +1224,8 @@ async function fetchData() {
   document.getElementById('logBox').innerHTML = '';
   // Xóa kết quả phân tích cũ khi kéo dữ liệu mới
   document.getElementById('results').classList.remove('show');
+  const btnA = document.getElementById('btnAnalyze');
+  if (btnA) { btnA.disabled = true; btnA.style.opacity = '.45'; btnA.style.cursor = 'not-allowed'; }
   log(`Kéo dữ liệu <strong>${ma}</strong>...`);
 
   try {
@@ -1270,6 +1272,9 @@ async function fetchData() {
     }
     if (d.errors?.length) d.errors.forEach(e => log(`⚠ ${e}`, 'info'));
     log(`Hoàn tất — ${d.overview?.ten_cty || ma}`, 'ok');
+    // Enable nút Phân tích sau khi có data
+    const btnA = document.getElementById('btnAnalyze');
+    if (btnA) { btnA.disabled = false; btnA.style.opacity = '1'; btnA.style.cursor = 'pointer'; }
   } catch (err) {
     log(err.message, 'err');
   } finally {
