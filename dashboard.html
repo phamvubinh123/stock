@@ -163,7 +163,10 @@ body {
 .summary-card {
   background: var(--surface);
   padding: 16px;
-  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  margin: 10px 14px;
 }
 .summary-top {
   display: flex;
@@ -258,7 +261,14 @@ body {
 }
 
 /* ── TABLE (SSI watchlist style) ── */
-.data-table { background: var(--surface); }
+.data-table {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  margin: 10px 14px;
+  overflow: hidden;
+}
 .table-head {
   display: grid;
   grid-template-columns: 72px 1fr 72px 56px 80px 72px;
