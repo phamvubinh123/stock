@@ -1095,7 +1095,7 @@ async function loadAiPicks() {
     const r = await fetch('/api/ai-picks');
     const d = await r.json();
     const box = document.getElementById('aiCommentary');
-    if (d.commentary) {
+    if (d.commentary && !d.commentary.startsWith('(')) {
       box.style.display = 'block';
       box.innerHTML = d.commentary.replace(/\n/g, '<br>');
     }
