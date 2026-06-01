@@ -1088,6 +1088,15 @@ async function loadDailyPicks() {
 
     const r = await fetch('/api/daily-picks');
     const d = await r.json();
+
+    // Nếu chưa có kết quả scan (server mới khởi động) → tự scan luôn
+    const hasData = (d.top_picks?.length || d.watchable?.length || d.avoid?.length);
+    if (!hasData) {
+      container.innerHTML = `<div class="empty">Đang phân tích watchlist lần đầu...</div>`;
+      await triggerScan();
+      return;
+    }
+
     picksData = d;
     renderPicks();
     updateSummary(d);
