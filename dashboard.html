@@ -740,6 +740,7 @@ body {
   </header>
 
     <div class="progress-bar" id="progBar"><div class="progress-fill" style="width:50%"></div></div>
+    <div id="scanNotice" style="display:none;text-align:center;font-size:.75rem;color:var(--text3);padding:4px 0">Vui lòng chờ đợi kết quả...</div>
 
     <!-- Sub-navs -->
     <nav class="sub-nav" id="subNavDaily">
@@ -1187,8 +1188,10 @@ function renderPicks() {
 
 async function triggerScan() {
   const btn = document.getElementById('btnScan');
+  const notice = document.getElementById('scanNotice');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang scan...'; }
   document.getElementById('progBar').classList.add('show');
+  if (notice) notice.style.display = 'block';
 
   try {
     const r = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -1202,6 +1205,7 @@ async function triggerScan() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Scan ngay'; }
     document.getElementById('progBar').classList.remove('show');
+    if (notice) notice.style.display = 'none';
   }
 }
 
