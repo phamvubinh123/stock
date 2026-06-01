@@ -691,8 +691,9 @@ async def scan_stream():
         save_daily_result(output)
         yield f"data: {json.dumps({'__done__': True, **output}, ensure_ascii=False)}\n\n"
 
-    return Response(event_gen(), media_type="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(event_gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ─────────────────────────────────────────────
