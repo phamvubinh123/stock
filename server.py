@@ -720,7 +720,11 @@ async def fetch_ticker(
             assert inc is not None and not inc.empty
 
             year_cols = get_year_cols(inc)[-n:]
-            result["years"] = pad5(year_cols, n)
+            # Pad years với chuỗi rỗng thay vì 0 để frontend không hiện cột trống
+            yc = list(year_cols)
+            while len(yc) < n:
+                yc.insert(0, "")
+            result["years"] = yc[-n:]
 
             def gv(*kws):
                 row = find_row(inc, *kws)
