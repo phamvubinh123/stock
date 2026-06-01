@@ -1385,21 +1385,21 @@ function analyze() {
       if (activeYrs.length > 0) {
         // header: tên chỉ số | năm1 | năm2 ...
         let tbl = `<div style="margin-top:6px;overflow-x:auto">
-          <table style="font-size:.68rem;border-collapse:collapse;width:100%">
+          <table style="font-size:.72rem;border-collapse:collapse;table-layout:auto">
           <thead><tr>
-            <th style="text-align:left;padding:2px 8px 2px 0;color:var(--text3);font-weight:500;white-space:nowrap"></th>`;
+            <th style="text-align:left;padding:3px 12px 3px 0;color:var(--text3);font-weight:500;white-space:nowrap"></th>`;
         activeYrs.forEach(({y}) => {
-          tbl += `<th style="padding:2px 6px;color:var(--text3);font-weight:500;text-align:right">${y}</th>`;
+          tbl += `<th style="padding:3px 10px;color:var(--text3);font-weight:500;text-align:right;white-space:nowrap">${y}</th>`;
         });
         tbl += `</tr></thead><tbody>`;
         series.forEach((s, si) => {
           const isLast = si === series.length - 1 && series.length > 1;
           tbl += `<tr style="${isLast?'border-top:1px solid var(--border)':''}">
-            <td style="padding:3px 8px 3px 0;color:var(--text3);white-space:nowrap;font-weight:${isLast?'600':'400'}">${s.label||''}</td>`;
+            <td style="padding:4px 12px 4px 0;color:var(--text3);white-space:nowrap;font-weight:${isLast?'600':'400'}">${s.label||''}</td>`;
           activeYrs.forEach(({i}) => {
             const v = s.v[i];
             const display = (v == null || isNaN(v) || !isFinite(v) || v === 0) ? '—' : s.f(v);
-            tbl += `<td style="padding:3px 6px;text-align:right;color:var(--text2);font-weight:${isLast?'600':'400'}">${display}</td>`;
+            tbl += `<td style="padding:4px 10px;text-align:right;white-space:nowrap;color:var(--text2);font-weight:${isLast?'600':'400'}">${display}</td>`;
           });
           tbl += `</tr>`;
         });
