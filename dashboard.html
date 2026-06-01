@@ -1224,9 +1224,29 @@ async function fetchData() {
     const d = await res.json();
     if (!d.ok && !d.income_ok && !d.balance_ok) throw new Error(d.message || 'Không tìm thấy dữ liệu');
 
-    // Reset tất cả year spans trước, tránh duplicate từ lần kéo trước
-    for (let i = 0; i < 5; i++) { const el = document.getElementById('y' + i); if (el) el.textContent = ''; }
-    if (d.years) d.years.forEach((y, i) => { const el = document.getElementById('y' + i); if (el) el.textContent = y; });
+    // Reset + set year spans, ẩn cột trùng hoặc trống
+    const allFields = ['dt','lng','lv','cpbh','cpql','lntt','thue','lnst','pe','gssk','tien','htk','tsnh','ts','nnh','ndh','phcp'];
+    for (let i = 0; i < 5; i++) {
+      const el = document.getElementById('y' + i);
+      if (el) { el.textContent = ''; el.style.display = ''; }
+      // Reset input fields ở vị trí này
+      allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) inp.value = ''; });
+    }
+    if (d.years) {
+      const seen = new Set();
+      d.years.forEach((y, i) => {
+        const el = document.getElementById('y' + i);
+        if (!el) return;
+        if (!y || y === '' || seen.has(y)) {
+          el.style.display = 'none';
+          // Ẩn input fields tương ứng
+          allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) inp.style.display = 'none'; });
+        } else {
+          el.textContent = y; seen.add(y);
+          allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) inp.style.display = ''; });
+        }
+      });
+    }
     ['dt','lng','lv','cpbh','cpql','lntt','thue','lnst','pe','gssk','tien','htk','tsnh','ts','nnh','ndh','phcp']
       .forEach(f => { if (d.data[f]) hiArr(f, d.data[f]); });
     // Lưu VCSH, ROE/ROA và EPS từ server
@@ -1378,10 +1398,16 @@ function analyze() {
     let bar = '';
     const series = [r.cd, r.cd2, r.cd3].filter(Boolean);
     if (series.length > 0) {
+      const seenYrs = new Set();
       const activeYrs = series[0].y.map((y,i) => ({y, i}))
-        .filter(({i}) => series.some(s => {
-          const v = s.v[i]; return v != null && !isNaN(v) && isFinite(v) && v !== 0;
-        }));
+        .filter(({y, i}) => {
+          if (!y || y === '' || y === 0) return false;
+          if (seenYrs.has(y)) return false;
+          seenYrs.add(y);
+          return series.some(s => {
+            const v = s.v[i]; return v != null && !isNaN(v) && isFinite(v) && v !== 0;
+          });
+        });
       if (activeYrs.length > 0) {
         // header: tên chỉ số | năm1 | năm2 ...
         let tbl = `<div style="margin-top:6px;overflow-x:auto">
