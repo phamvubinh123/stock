@@ -959,6 +959,25 @@ async def fetch_ticker(
                     pe_data = result.get("_pe_shares_lnst", {})
                     paid_vnd = pe_data.get("paid", 0)
                     kl_trieu = round(paid_vnd / 10_000 / 1_000_000, 2) if paid_vnd > 0 else 0
+                # P/E fallback từ EPS ratio (cho ngân hàng không có paid-in)
+                pe_list = result["data"].get("pe", [0] * n)
+                eps_arr2 = result["data"].get("eps_ratio", [0] * n)
+                if price_dong > 0:
+                    for i in range(n):
+                        if (pe_list[i] == 0 or pe_list[i] == -1) and eps_arr2[i] and eps_arr2[i] > 0:
+                            pe_calc2 = round(price_dong / eps_arr2[i], 1)
+                            if 1 < pe_calc2 < 500:
+                                pe_list[i] = pe_calc2
+                result["data"]["pe"] = pe_list
+
+                # GSSK = VCSH / KL lưu hành (fallback khi không có "Book value" row)
+                if all(v == 0 for v in result["data"].get("gssk", [0])) and kl_trieu > 0:
+                    vcsh_arr = result["data"].get("vcsh", [0] * n)
+                    result["data"]["gssk"] = [
+                        round(v / kl_trieu, 2) if v and kl_trieu > 0 else 0
+                        for v in vcsh_arr
+                    ]
+
                 result["overview"] = {
                     "ten_cty": ticker,
                     "gia_hien_tai": price_k,
