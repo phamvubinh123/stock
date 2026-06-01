@@ -1076,31 +1076,41 @@ let currentPickTab = 'top';
 async function loadDailyPicks() {
   const container = document.getElementById('picksContainer');
   try {
-    // Kiểm tra watchlist trước
     const wlRes = await fetch('/api/watchlist');
     const wlData = await wlRes.json();
     const watchlist = wlData.watchlist || [];
 
     if (!watchlist.length) {
       updateSummary({});
+      container.innerHTML = `<div class="empty">Watchlist trống — thêm mã ở tab <strong>Theo dõi</strong> để bắt đầu.</div>`;
       return;
     }
 
     const r = await fetch('/api/daily-picks');
     const d = await r.json();
-
-    // Nếu chưa có kết quả scan (server mới khởi động) → tự scan luôn
     const hasData = (d.top_picks?.length || d.watchable?.length || d.avoid?.length);
-    if (!hasData) {
-      container.innerHTML = `<div class="empty">Đang phân tích watchlist lần đầu...</div>`;
-      await triggerScan();
-      return;
-    }
 
-    picksData = d;
-    renderPicks();
-    updateSummary(d);
-    loadAiPicks();
+    if (hasData) {
+      picksData = d;
+      renderPicks();
+      updateSummary(d);
+      loadAiPicks();
+    } else {
+      // Chưa có scan → hiện danh sách watchlist + thông báo
+      updateSummary({});
+      let html = `<div class="data-table">
+        <div class="table-head"><span>Mã trong Watchlist</span></div>`;
+      watchlist.forEach(t => {
+        html += `<div class="table-row" onclick="openInBuffett('${t}')">
+          <div><div class="sym">${t}</div></div>
+        </div>`;
+      });
+      html += `</div>`;
+      html += `<div class="empty" style="color:var(--purple);font-weight:500;margin-top:8px">
+        📊 Vui lòng nhấn <strong>Scan ngay</strong> để cập nhật thông tin mới nhất
+      </div>`;
+      container.innerHTML = html;
+    }
   } catch (e) {
     container.innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`;
   }
