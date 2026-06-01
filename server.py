@@ -662,6 +662,39 @@ async def trigger_scan(body: dict = Body(default={})):
     return ok(result)
 
 
+@app.get("/api/scan-stream")
+async def scan_stream():
+    """SSE: stream từng mã khi scan xong, frontend render ngay."""
+    symbols = load_watchlist()
+
+    async def event_gen():
+        results = []
+        for ticker in symbols:
+            r = await scan_one_ticker(ticker)
+            results.append(r)
+            await asyncio.sleep(0.3)
+            yield f"data: {json.dumps(r, ensure_ascii=False)}\n\n"
+
+        # Sau khi xong hết, lưu kết quả và gửi event done
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        top_picks = [r for r in results if r.get("score", 0) >= 9]
+        watchable  = [r for r in results if 6 <= r.get("score", 0) < 9]
+        avoid      = [r for r in results if r.get("score", 0) < 6]
+        output = {
+            "scanned_at": datetime.datetime.now().isoformat(),
+            "total": len(results),
+            "top_picks": top_picks,
+            "watchable": watchable,
+            "avoid": avoid,
+            "all_results": results,
+        }
+        save_daily_result(output)
+        yield f"data: {json.dumps({'__done__': True, **output}, ensure_ascii=False)}\n\n"
+
+    return Response(event_gen(), media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 # ─────────────────────────────────────────────
 # ROUTES — BUFFETT ANALYSIS (từ app.py)
 # ─────────────────────────────────────────────

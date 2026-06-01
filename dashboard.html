@@ -787,7 +787,7 @@ body {
         <div class="fetch-row">
           <div class="fg" style="flex:0 0 110px">
             <label>Mã CP</label>
-            <input type="text" id="maCP" placeholder="FPT" maxlength="10" style="text-transform:uppercase"
+            <input type="text" id="maCP" placeholder="Nhập Mã CP" maxlength="10" style="text-transform:uppercase"
               onkeydown="if(event.key==='Enter')fetchData()">
           </div>
           <div class="fg" style="flex:0 0 70px">
@@ -1189,15 +1189,50 @@ async function triggerScan() {
   document.getElementById('progBar').classList.add('show');
   if (notice) notice.style.display = 'block';
 
+  // Reset danh sách
+  const streamResults = [];
+  picksData = { top_picks: [], watchable: [], avoid: [], all_results: [] };
+  document.getElementById('picksContainer').innerHTML =
+    `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>%</span><span>Biên gộp</span><span>Giá</span></div><div id="streamRows"></div></div>`;
+
   try {
-    const r = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const d = await r.json();
-    picksData = d;
-    renderPicks();
-    updateSummary(d);
-    loadAiPicks();
+    await new Promise((resolve, reject) => {
+      const es = new EventSource('/api/scan-stream');
+      es.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.__done__) {
+          picksData = d;
+          renderPicks();
+          updateSummary(d);
+          es.close(); resolve();
+          return;
+        }
+        // Render mã vừa xong ngay lập tức
+        streamResults.push(d);
+        const clr = scoreColor(d.score || 0);
+        const fillW = Math.round(((d.score||0)/14)*100);
+        const km = d.key_metrics || {};
+        const rowEl = document.createElement('div');
+        rowEl.className = `table-row ${scoreRowClass(d.score||0)}`;
+        rowEl.style.cursor = 'pointer';
+        rowEl.onclick = () => openInBuffett(d.ticker);
+        rowEl.innerHTML = `
+          <div><div class="sym">${d.ticker}</div>
+            <div class="sub">${d.cagr_lntt != null ? 'CAGR '+fmtPct(d.cagr_lntt) : ''}</div></div>
+          <div class="cell"><div class="score-mini">
+            <div class="score-track"><div class="score-fill" style="width:${fillW}%;background:${clr}"></div></div>
+            <span class="score-txt" style="color:${clr}">${d.score||0}/14</span>
+          </div></div>
+          <div class="cell">${km.roe != null ? fmtPct(km.roe) : '—'}</div>
+          <div class="cell cell-sm">${km.pe > 0 ? fmt(km.pe,1)+'x' : '—'}</div>
+          <div class="cell">${km.gross_margin != null ? fmtPct(km.gross_margin) : '—'}</div>
+          <div class="cell">${km.price > 0 ? fmt(km.price,1) : '—'}</div>`;
+        document.getElementById('streamRows')?.appendChild(rowEl);
+      };
+      es.onerror = () => { es.close(); reject(new Error('Stream lỗi')); };
+    });
   } catch (e) {
-    alert('Lỗi scan: ' + e.message);
+    console.error('Lỗi scan:', e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Scan ngay'; }
     document.getElementById('progBar').classList.remove('show');
