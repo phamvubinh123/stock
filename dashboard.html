@@ -708,10 +708,6 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Trang chủ
     </button>
-    <button class="nav-item" data-page="watchlist" onclick="showPage('watchlist')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      Theo dõi
-    </button>
     <button class="nav-item" data-page="buffett" onclick="showPage('buffett')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       Phân tích
@@ -761,20 +757,25 @@ body {
     <div class="page active" id="page-daily">
       <div class="summary-card" id="summaryCard">
         <div class="summary-top">
-          <div>
-            <div class="summary-label">Score — Watchlist</div>
-            <div class="summary-value" id="sumScore">—</div>
-            <div class="summary-change up" id="sumChange">Chưa scan</div>
+          <div class="wl-wrap" style="flex:1;margin-right:12px">
+            <div class="wl-tags" id="wlTags"></div>
+            <div class="wl-add">
+              <input type="text" id="wlInput" placeholder="Thêm mã (VD: HPG)" maxlength="10" onkeydown="if(event.key==='Enter')addToWl()">
+              <button class="btn btn-primary" onclick="addToWl()">+</button>
+            </div>
           </div>
           <button class="btn btn-primary" id="btnScan" onclick="triggerScan()">Scan ngay</button>
         </div>
         <div class="summary-grid">
-          <div class="summary-item"><div class="lbl">Top picks</div><div class="val" id="sumTop">0</div></div>
+          <div class="summary-item"><div class="lbl">Đạt chuẩn</div><div class="val" id="sumTop">0</div></div>
           <div class="summary-item"><div class="lbl">Theo dõi</div><div class="val" id="sumWatch">0</div></div>
           <div class="summary-item"><div class="lbl">Tránh</div><div class="val" id="sumAvoid">0</div></div>
           <div class="summary-item"><div class="lbl">Lần scan</div><div class="val" id="sumTime" style="font-size:.72rem">—</div></div>
         </div>
       </div>
+      <span id="sumScore" style="display:none"></span>
+      <span id="sumChange" style="display:none"></span>
+      <span id="wlCount" style="display:none"></span>
 
       <div id="aiCommentary" class="ai-box" style="display:none"></div>
       <div id="picksContainer">
@@ -885,26 +886,6 @@ body {
       </div>
     </div>
 
-    <!-- ═══ WATCHLIST ═══ -->
-    <div class="page" id="page-watchlist">
-      <span id="wlCount" style="display:none"></span>
-      <div class="card">
-        <div class="card-title">Quản lý watchlist</div>
-        <div class="wl-wrap">
-          <div class="wl-tags" id="wlTags"></div>
-          <div class="wl-add">
-            <input type="text" id="wlInput" placeholder="HPG" maxlength="10" onkeydown="if(event.key==='Enter')addToWl()">
-            <button class="btn btn-primary" onclick="addToWl()">+</button>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <p style="font-size:.82rem;color:var(--text2);line-height:1.6;margin-bottom:12px">
-          Watchlist được dùng cho scan tự động lúc 7:30 sáng và scan thủ công.
-        </p>
-        <button class="btn btn-primary" style="width:100%" onclick="triggerScan();showPage('daily')">Scan watchlist ngay</button>
-      </div>
-    </div>
 
     <!-- ═══ TECHNICAL ═══ -->
     <div class="page" id="page-technical">

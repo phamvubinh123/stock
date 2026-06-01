@@ -27,11 +27,7 @@ log = logging.getLogger("stock-agent")
 # ─────────────────────────────────────────────
 # WATCHLIST CONFIG — sửa thoải mái
 # ─────────────────────────────────────────────
-DEFAULT_WATCHLIST = [
-    "FPT", "MWG", "VNM", "HPG", "REE",
-    "PNJ", "MSN", "VCB", "TCB", "ACB",
-    "BMP", "DGC", "GEX", "KDH", "NLG",
-]
+DEFAULT_WATCHLIST = ["FPT", "VNM", "VCB"]
 
 # File lưu watchlist & daily results
 WATCHLIST_FILE  = "watchlist.json"
