@@ -1224,36 +1224,38 @@ async function fetchData() {
     const d = await res.json();
     if (!d.ok && !d.income_ok && !d.balance_ok) throw new Error(d.message || 'Không tìm thấy dữ liệu');
 
-    // Reset + set year spans, ẩn cột trùng hoặc trống
+    // Build years reversed (newest first), dedup, pad to 5
     const allFields = ['dt','lng','lv','cpbh','cpql','lntt','thue','lnst','pe','gssk','tien','htk','tsnh','ts','nnh','ndh','phcp'];
+    const rawYears = d.years || [];
+    const seen = new Set();
+    const cleanYears = rawYears.filter(y => { if (!y || y==='' || seen.has(String(y))) return false; seen.add(String(y)); return true; });
+    // Newest first
+    const revYears = [...cleanYears].reverse();
+    while (revYears.length < 5) revYears.push('');
+    // Reset tất cả
     for (let i = 0; i < 5; i++) {
       const el = document.getElementById('y' + i);
-      if (el) { el.textContent = ''; el.style.display = ''; }
-      // Reset input fields ở vị trí này
-      allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) inp.value = ''; });
+      if (el) { el.textContent = revYears[i] || ''; el.style.display = ''; }
+      allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) { inp.value = ''; inp.style.display = ''; } });
     }
-    if (d.years) {
-      const seen = new Set();
-      d.years.forEach((y, i) => {
-        const el = document.getElementById('y' + i);
-        if (!el) return;
-        if (!y || y === '' || seen.has(y)) {
-          el.style.display = 'none';
-          // Ẩn input fields tương ứng
-          allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) inp.style.display = 'none'; });
-        } else {
-          el.textContent = y; seen.add(y);
-          allFields.forEach(f => { const inp = document.getElementById(f+i); if (inp) inp.style.display = ''; });
-        }
+    // Load data reversed: slot 0 = newest (index n-1), slot 1 = n-2, ...
+    allFields.forEach(f => {
+      const arr = d.data[f];
+      if (!arr) return;
+      const rev = [...arr].reverse();
+      rev.forEach((v, i) => {
+        const inp = document.getElementById(f + i);
+        if (inp && v != null) { inp.value = v === 0 ? '' : fmtInput(v); }
       });
-    }
-    ['dt','lng','lv','cpbh','cpql','lntt','thue','lnst','pe','gssk','tien','htk','tsnh','ts','nnh','ndh','phcp']
-      .forEach(f => { if (d.data[f]) hiArr(f, d.data[f]); });
+    });
+    // Lưu reversed years cho analyze()
+    window._revYears = revYears;
     // Lưu VCSH, ROE/ROA và EPS từ server
-    window._vcshData  = d.data?.vcsh       || null;
-    window._roeArr    = d.data?.roe_arr    || null;
-    window._roaArr    = d.data?.roa_arr    || null;
-    window._epsRatio  = d.data?.eps_ratio  || null; // VND/CP từ ratio table
+    const rev = arr => arr ? [...arr].reverse() : null;
+    window._vcshData  = rev(d.data?.vcsh);
+    window._roeArr    = rev(d.data?.roe_arr);
+    window._roaArr    = rev(d.data?.roa_arr);
+    window._epsRatio  = rev(d.data?.eps_ratio); // VND/CP từ ratio table
     if (d.overview) {
       hi('tenCty', d.overview.ten_cty);
       if (d.overview.gia_hien_tai) hi('giaHT', d.overview.gia_hien_tai);
@@ -1275,8 +1277,8 @@ function analyze() {
   const ten = document.getElementById('tenCty').value || ma;
   const giaHT = g('giaHT'), giaSS = g('giaSS'), klLH = g('klLH');
   const peTarget = g('peTarget') || 15;
-  const yrs = Array.from({length:5}, (_, i) => document.getElementById('y'+i)?.textContent || String(2020+i));
-  const N = 4;
+  const yrs = Array.from({length:5}, (_, i) => document.getElementById('y'+i)?.textContent || '');
+  const N = 0; // slot 0 = năm mới nhất (reversed)
 
   const dt=gA('dt'),lng=gA('lng'),lv=gA('lv'),cpbh=gA('cpbh'),cpql=gA('cpql');
   const lntt=gA('lntt'),thue=gA('thue'),lnst=gA('lnst'),pe=gA('pe');
@@ -1309,11 +1311,13 @@ function analyze() {
   const noR=totNo.map((v,i)=>ts[i]>0?v/ts[i]:NaN);
   const ttnR=tien.map((v,i)=>nnh[i]>0?v/nnh[i]:NaN);
 
-  const isC=a=>{let d=0;for(let i=1;i<a.length;i++)if(a[i]<a[i-1])d++;return d<=1};
-  // Tìm năm đầu tiên có data thật (≠0) để tính CAGR, tránh lỗi khi năm đầu bị pad = 0
-  const firstIdx = lnst.findIndex(v => v > 0);
-  const cagr = firstIdx >= 0 && firstIdx < N && lnst[N] > 0
-    ? Math.pow(lnst[N] / lnst[firstIdx], 1 / (N - firstIdx)) - 1
+  // Sau khi reverse: index 0 = newest, index 4 = oldest
+  // isC: tăng trưởng nhất quán — reversed nên kiểm tra i < i+1 (index nhỏ = mới hơn)
+  const isC=a=>{let d=0;for(let i=0;i<a.length-1;i++)if(a[i+1]>0&&a[i]<a[i+1])d++;return d<=1};
+  // CAGR: lastIdx = index xa nhất có data (oldest), N=0 là newest
+  const lastIdx = [...lnst].map((v,i)=>({v,i})).filter(x=>x.v>0).slice(-1)[0]?.i ?? -1;
+  const cagr = lastIdx > N && lnst[N] > 0 && lnst[lastIdx] > 0
+    ? Math.pow(lnst[N] / lnst[lastIdx], 1 / (lastIdx - N)) - 1
     : NaN;
   // Định giá đơn giản: EPS × P/E mục tiêu
   // Ưu tiên EPS từ ratio table (VND), fallback tính từ LNST/KL
