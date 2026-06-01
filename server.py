@@ -566,35 +566,10 @@ async def run_daily_scan(watchlist: Optional[List[str]] = None) -> dict:
 # ─────────────────────────────────────────────
 # SCHEDULER
 # ─────────────────────────────────────────────
-scheduler_task: Optional[asyncio.Task] = None
-
-
-async def scheduler_loop():
-    """Chạy scan lúc 7:30 sáng mỗi ngày (giờ VN)."""
-    import pytz
-    vn_tz = pytz.timezone("Asia/Ho_Chi_Minh")
-    log.info("Scheduler started — daily scan lúc 7:30 sáng giờ VN")
-
-    while True:
-        now = datetime.datetime.now(vn_tz)
-        target = now.replace(hour=7, minute=30, second=0, microsecond=0)
-        if now >= target:
-            target += datetime.timedelta(days=1)
-
-        wait_secs = (target - now).total_seconds()
-        log.info(f"Scan tiếp theo lúc {target.strftime('%Y-%m-%d %H:%M')} VN ({wait_secs/3600:.1f}h nữa)")
-        await asyncio.sleep(wait_secs)
-        await run_daily_scan()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global scheduler_task
-    scheduler_task = asyncio.create_task(scheduler_loop())
     log.info("🚀 Stock Agent AI started")
     yield
-    if scheduler_task:
-        scheduler_task.cancel()
     log.info("Stock Agent AI stopped")
 
 
@@ -1285,7 +1260,6 @@ if __name__ == "__main__":
     print("=" * 55)
     print("  🌐 Dashboard : http://localhost:8000")
     print("  📋 API Docs  : http://localhost:8000/docs")
-    print("  ⏰ Auto scan : 7:30 sáng mỗi ngày (giờ VN)")
     print("  ⏹  Ctrl+C    : dừng")
     print("=" * 55 + "\n")
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
