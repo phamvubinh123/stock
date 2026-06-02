@@ -122,31 +122,22 @@ def save_daily_result(data):
 # VNSTOCK HELPERS
 # ─────────────────────────────────────────────
 def get_vnstock():
-    """Import Vnstock — ưu tiên vnstock3, fallback vnstock v4 nếu vnstock3 lỗi import."""
-    for mod in ("vnstock3", "vnstock"):
-        try:
-            return getattr(__import__(mod), "Vnstock")
-        except (ImportError, ModuleNotFoundError):
-            continue
-    raise HTTPException(503, "Chưa cài vnstock. Chạy: pip install vnstock3 --upgrade")
+    """Import Vnstock từ vnstock 4.x."""
+    try:
+        from vnstock import Vnstock
+        return Vnstock
+    except (ImportError, ModuleNotFoundError):
+        raise HTTPException(503, "Chưa cài vnstock. Chạy: pip install vnstock --upgrade")
 
 
 def get_trading():
-    try:
-        from vnstock3 import Trading
-        return Trading
-    except ImportError:
-        from vnstock import Trading
-        return Trading
+    from vnstock import Trading
+    return Trading
 
 
 def get_quote():
-    try:
-        from vnstock3 import Quote
-        return Quote
-    except ImportError:
-        from vnstock import Quote
-        return Quote
+    from vnstock import Quote
+    return Quote
 
 
 def safe_float_v(v, default=0.0):
@@ -1071,7 +1062,9 @@ def get_price_board(tickers: str = Query(...)):
     except HTTPException:
         raise
     except ImportError:
-        raise HTTPException(503, "vnstock3 chưa cài. Chạy: pip install vnstock3 --upgrade")
+        raise HTTPException(503, "vnstock chưa cài. Chạy: pip install vnstock --upgrade")
+
+@app.get("/api/history/{ticker}")
 def get_history(
     ticker: str,
     start: str = Query("2024-01-01"),
@@ -1285,6 +1278,269 @@ def debug_ticker(ticker: str):
     except Exception as e:
         out["error"] = str(e)
     return ok(out)
+
+
+# ─────────────────────────────────────────────
+# AUTH — PIN 4 số, lưu users.json
+# ─────────────────────────────────────────────
+USERS_FILE = "users.json"
+SESSIONS: dict = {}  # token -> username (in-memory, reset khi restart)
+
+
+def load_users() -> dict:
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE) as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+
+def save_users(users: dict):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+
+def get_current_user(request: Request) -> str:
+    token = request.cookies.get("sa_token") or request.headers.get("X-Token", "")
+    user = SESSIONS.get(token)
+    if not user:
+        raise HTTPException(401, "Chưa đăng nhập")
+    return user
+
+
+@app.post("/api/auth/register")
+async def register(body: dict = Body(...)):
+    username = body.get("username", "").strip().lower()
+    pin = str(body.get("pin", "")).strip()
+    if not username or len(username) < 2:
+        raise HTTPException(400, "Username tối thiểu 2 ký tự")
+    if not pin.isdigit() or len(pin) != 4:
+        raise HTTPException(400, "PIN phải là 4 chữ số")
+    users = load_users()
+    if username in users:
+        raise HTTPException(409, "Username đã tồn tại")
+    users[username] = {"pin": pin, "created_at": datetime.datetime.now().isoformat()}
+    save_users(users)
+    return ok({"ok": True, "message": f"Tạo tài khoản '{username}' thành công"})
+
+
+@app.post("/api/auth/login")
+async def login(body: dict = Body(...)):
+    username = body.get("username", "").strip().lower()
+    pin = str(body.get("pin", "")).strip()
+    users = load_users()
+    if username not in users or users[username]["pin"] != pin:
+        raise HTTPException(401, "Username hoặc PIN không đúng")
+    import secrets
+    token = secrets.token_hex(24)
+    SESSIONS[token] = username
+    resp = ok({"ok": True, "username": username, "token": token})
+    resp.set_cookie("sa_token", token, httponly=True, samesite="lax", max_age=86400 * 7)
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    token = request.cookies.get("sa_token", "")
+    SESSIONS.pop(token, None)
+    resp = ok({"ok": True})
+    resp.delete_cookie("sa_token")
+    return resp
+
+
+@app.get("/api/auth/me")
+async def me(request: Request):
+    try:
+        user = get_current_user(request)
+        return ok({"ok": True, "username": user})
+    except HTTPException:
+        return ok({"ok": False, "username": None})
+
+
+# ─────────────────────────────────────────────
+# CALCULATOR — lưu lịch sử theo user
+# ─────────────────────────────────────────────
+CALC_DIR = "calc_data"
+os.makedirs(CALC_DIR, exist_ok=True)
+
+
+def calc_file(username: str) -> str:
+    return os.path.join(CALC_DIR, f"{username}.json")
+
+
+def load_calc_history(username: str) -> list:
+    fp = calc_file(username)
+    if os.path.exists(fp):
+        try:
+            with open(fp) as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+
+def save_calc_entry(username: str, entry: dict):
+    history = load_calc_history(username)
+    entry["saved_at"] = datetime.datetime.now().isoformat()
+    entry["id"] = f"{int(datetime.datetime.now().timestamp()*1000)}"
+    history.insert(0, entry)
+    history = history[:50]  # giữ tối đa 50 bản ghi
+    with open(calc_file(username), "w") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+    return entry
+
+
+@app.post("/api/calc/avg-price")
+async def calc_avg_price(request: Request, body: dict = Body(...)):
+    """
+    Tính trung bình giá.
+    Input: { shares_held, avg_price, shares_buy, buy_price, save: bool }
+    """
+    user = get_current_user(request)
+
+    sh = float(body.get("shares_held", 0))
+    ap = float(body.get("avg_price", 0))
+    sb = float(body.get("shares_buy", 0))
+    bp = float(body.get("buy_price", 0))
+    ticker = body.get("ticker", "").upper()
+
+    if sh <= 0 or ap <= 0 or sb <= 0 or bp <= 0:
+        raise HTTPException(400, "Vui lòng nhập đầy đủ số liệu hợp lệ")
+
+    total_shares = sh + sb
+    total_cost = sh * ap + sb * bp
+    new_avg = total_cost / total_shares
+    breakeven_pct = ((new_avg - bp) / bp) * 100  # % cần tăng từ giá mua thêm để hòa vốn
+
+    # Bảng mô phỏng: mua thêm 0.5x, 1x, 1.5x, 2x, 3x lô sb
+    sim = []
+    for mult in [0.5, 1.0, 1.5, 2.0, 3.0]:
+        s_extra = sb * mult
+        t_shares = sh + s_extra
+        t_cost = sh * ap + s_extra * bp
+        sim.append({
+            "label": f"+{mult}x lô ({int(s_extra):,} CP)",
+            "total_shares": round(t_shares),
+            "total_cost": round(t_cost),
+            "new_avg": round(t_cost / t_shares, 2),
+            "breakeven_pct": round(((t_cost / t_shares - bp) / bp) * 100, 1),
+        })
+
+    result = {
+        "type": "avg_price",
+        "ticker": ticker,
+        "shares_held": sh,
+        "avg_price": ap,
+        "shares_buy": sb,
+        "buy_price": bp,
+        "total_shares": round(total_shares),
+        "total_cost": round(total_cost),
+        "new_avg": round(new_avg, 2),
+        "breakeven_pct": round(breakeven_pct, 1),
+        "simulation": sim,
+    }
+
+    if body.get("save", False):
+        result = save_calc_entry(user, result)
+
+    return ok(result)
+
+
+@app.post("/api/calc/dao-hang")
+async def calc_dao_hang(request: Request, body: dict = Body(...)):
+    """
+    Tính đảo hàng.
+    Input: { shares, buy_price, current_price, rebuy_price, fee_sell, fee_buy, save: bool }
+    """
+    user = get_current_user(request)
+
+    shares     = float(body.get("shares", 0))
+    buy_price  = float(body.get("buy_price", 0))
+    cur_price  = float(body.get("current_price", 0))
+    rebuy_price= float(body.get("rebuy_price", 0))
+    fee_sell   = float(body.get("fee_sell", 0.15)) / 100   # mặc định 0.15%
+    fee_buy    = float(body.get("fee_buy",  0.10)) / 100   # mặc định 0.10%
+    ticker     = body.get("ticker", "").upper()
+
+    if shares <= 0 or buy_price <= 0 or cur_price <= 0 or rebuy_price <= 0:
+        raise HTTPException(400, "Vui lòng nhập đầy đủ số liệu hợp lệ")
+
+    # Tính lỗ khi bán
+    sell_value      = shares * cur_price
+    sell_fee        = sell_value * fee_sell
+    sell_net        = sell_value - sell_fee          # tiền thực nhận
+    original_cost   = shares * buy_price
+    realized_loss   = original_cost - sell_net       # lỗ thực tế (dương = lỗ)
+
+    # Mua lại: cần bao nhiêu CP để bù lỗ?
+    # Tổng tiền bỏ ra khi mua lại = sell_net (tiền nhận được từ bán)
+    rebuy_cost_per  = rebuy_price * (1 + fee_buy)
+    shares_rebuy    = sell_net / rebuy_cost_per       # số CP mua lại được
+    total_rebuy_cost= shares_rebuy * rebuy_cost_per
+
+    # Break-even sau đảo hàng
+    breakeven_new   = total_rebuy_cost / shares_rebuy  # = rebuy_price * (1 + fee_buy)
+
+    # So sánh 2 kịch bản
+    # Kịch bản 1: giữ nguyên → cần giá tăng về buy_price để hòa
+    keep_breakeven_pct = ((buy_price - cur_price) / cur_price) * 100
+
+    # Kịch bản 2: đảo hàng → breakeven thấp hơn
+    dao_breakeven_pct  = ((breakeven_new - rebuy_price) / rebuy_price) * 100
+
+    # Lợi thế đảo hàng: giảm được bao nhiêu % break-even
+    advantage_pct = ((buy_price - breakeven_new) / buy_price) * 100
+
+    result = {
+        "type": "dao_hang",
+        "ticker": ticker,
+        "shares": shares,
+        "buy_price": buy_price,
+        "current_price": cur_price,
+        "rebuy_price": rebuy_price,
+        "fee_sell_pct": fee_sell * 100,
+        "fee_buy_pct": fee_buy * 100,
+        # Kết quả bán
+        "sell_value": round(sell_value),
+        "sell_fee": round(sell_fee),
+        "sell_net": round(sell_net),
+        "realized_loss": round(realized_loss),
+        # Kết quả mua lại
+        "shares_rebuy": round(shares_rebuy, 0),
+        "total_rebuy_cost": round(total_rebuy_cost),
+        "breakeven_new": round(breakeven_new, 2),
+        # So sánh
+        "keep_breakeven_pct": round(keep_breakeven_pct, 1),
+        "dao_breakeven_pct": round(dao_breakeven_pct, 1),
+        "advantage_pct": round(advantage_pct, 1),
+        "is_worth_it": advantage_pct > 5,  # đảo hàng đáng nếu giảm >5% break-even
+    }
+
+    if body.get("save", False):
+        result = save_calc_entry(user, result)
+
+    return ok(result)
+
+
+@app.get("/api/calc/history")
+async def get_calc_history(request: Request, type: Optional[str] = Query(None)):
+    user = get_current_user(request)
+    history = load_calc_history(user)
+    if type:
+        history = [h for h in history if h.get("type") == type]
+    return ok({"history": history, "count": len(history)})
+
+
+@app.delete("/api/calc/history/{entry_id}")
+async def delete_calc_entry(entry_id: str, request: Request):
+    user = get_current_user(request)
+    history = load_calc_history(user)
+    history = [h for h in history if h.get("id") != entry_id]
+    with open(calc_file(user), "w") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+    return ok({"ok": True})
 
 
 if __name__ == "__main__":
