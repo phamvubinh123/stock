@@ -25,11 +25,105 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("stock-agent")
 
 # ─────────────────────────────────────────────
+# DATABASE — PostgreSQL via psycopg2
+# ─────────────────────────────────────────────
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    from psycopg2.pool import ThreadedConnectionPool
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_pool = None
+
+def get_pool():
+    global _pool
+    if _pool is None:
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL chưa được set")
+        _pool = ThreadedConnectionPool(1, 10, DATABASE_URL, sslmode="require")
+    return _pool
+
+def get_conn():
+    return get_pool().getconn()
+
+def put_conn(conn):
+    get_pool().putconn(conn)
+
+def db_exec(sql: str, params=None, fetch: str = None):
+    """Chạy SQL, fetch='one'|'all'|None."""
+    conn = get_conn()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, params or ())
+            conn.commit()
+            if fetch == "one":  return cur.fetchone()
+            if fetch == "all":  return cur.fetchall()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        put_conn(conn)
+
+def init_db():
+    """Tạo tables nếu chưa có."""
+    ddl = """
+    CREATE TABLE IF NOT EXISTS users (
+        username VARCHAR(50) PRIMARY KEY,
+        pin      VARCHAR(10) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS watchlists (
+        username VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        ticker   VARCHAR(10) NOT NULL,
+        position INT DEFAULT 0,
+        PRIMARY KEY (username, ticker)
+    );
+    CREATE TABLE IF NOT EXISTS dca_transactions (
+        id       SERIAL PRIMARY KEY,
+        username VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        ticker   VARCHAR(10) NOT NULL,
+        shares   FLOAT NOT NULL,
+        price    FLOAT NOT NULL,
+        date     DATE,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS daily_picks (
+        username   VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        data       JSONB NOT NULL,
+        scanned_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (username)
+    );
+    CREATE TABLE IF NOT EXISTS calc_history (
+        id         VARCHAR(50) PRIMARY KEY,
+        username   VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        type       VARCHAR(50),
+        data       JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(ddl)
+        conn.commit()
+        log.info("✅ DB tables ready")
+    except Exception as e:
+        conn.rollback()
+        log.error(f"DB init error: {e}")
+    finally:
+        put_conn(conn)
+
+USE_DB = bool(DATABASE_URL) and HAS_PSYCOPG2
+
+# ─────────────────────────────────────────────
 # WATCHLIST CONFIG — sửa thoải mái
 # ─────────────────────────────────────────────
 DEFAULT_WATCHLIST = ["FPT", "VCB"]
 
-# File lưu watchlist & daily results
+# File lưu watchlist & daily results (fallback khi không có DB)
 WATCHLIST_FILE  = "watchlist.json"
 DAILY_RESULT_FILE = "daily_picks.json"
 
@@ -88,7 +182,15 @@ def safe_int(val, default=0):
 # ─────────────────────────────────────────────
 # WATCHLIST HELPERS
 # ─────────────────────────────────────────────
-def load_watchlist() -> List[str]:
+def load_watchlist(username: str = "default") -> List[str]:
+    if USE_DB:
+        try:
+            rows = db_exec("SELECT ticker FROM watchlists WHERE username=%s ORDER BY position", (username,), fetch="all")
+            if rows is not None:
+                tickers = [r["ticker"] for r in rows]
+                return tickers if tickers else list(DEFAULT_WATCHLIST)
+        except Exception as e:
+            log.warning(f"DB load_watchlist error: {e}")
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE) as f:
@@ -98,12 +200,28 @@ def load_watchlist() -> List[str]:
     return list(DEFAULT_WATCHLIST)
 
 
-def save_watchlist(symbols: List[str]):
+def save_watchlist(symbols: List[str], username: str = "default"):
+    symbols = [s.upper().strip() for s in symbols]
+    if USE_DB:
+        try:
+            db_exec("DELETE FROM watchlists WHERE username=%s", (username,))
+            for i, t in enumerate(symbols):
+                db_exec("INSERT INTO watchlists (username,ticker,position) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING", (username, t, i))
+            return
+        except Exception as e:
+            log.warning(f"DB save_watchlist error: {e}")
     with open(WATCHLIST_FILE, "w") as f:
-        json.dump([s.upper().strip() for s in symbols], f)
+        json.dump(symbols, f)
 
 
-def load_daily_result():
+def load_daily_result(username: str = "default"):
+    if USE_DB:
+        try:
+            row = db_exec("SELECT data FROM daily_picks WHERE username=%s", (username,), fetch="one")
+            if row:
+                return row["data"]
+        except Exception as e:
+            log.warning(f"DB load_daily_result error: {e}")
     if os.path.exists(DAILY_RESULT_FILE):
         try:
             with open(DAILY_RESULT_FILE) as f:
@@ -113,7 +231,18 @@ def load_daily_result():
     return None
 
 
-def save_daily_result(data):
+def save_daily_result(data, username: str = "default"):
+    if USE_DB:
+        try:
+            data_json = json.dumps(data, cls=SafeEncoder, ensure_ascii=False)
+            db_exec("""
+                INSERT INTO daily_picks (username, data, scanned_at)
+                VALUES (%s, %s::jsonb, NOW())
+                ON CONFLICT (username) DO UPDATE SET data=%s::jsonb, scanned_at=NOW()
+            """, (username, data_json, data_json))
+            return
+        except Exception as e:
+            log.warning(f"DB save_daily_result error: {e}")
     with open(DAILY_RESULT_FILE, "w") as f:
         json.dump(data, cls=SafeEncoder, fp=f, ensure_ascii=False, indent=2)
 
@@ -522,9 +651,9 @@ async def scan_one_ticker(ticker: str) -> dict:
         return {"ticker": ticker, "ok": False, "error": str(e), "score": 0}
 
 
-async def run_daily_scan(watchlist: Optional[List[str]] = None) -> dict:
+async def run_daily_scan(watchlist: Optional[List[str]] = None, username: str = "default") -> dict:
     """Scan toàn bộ watchlist, sắp xếp theo score."""
-    symbols = watchlist or load_watchlist()
+    symbols = watchlist or load_watchlist(username)
     log.info(f"Daily scan bắt đầu — {len(symbols)} mã: {symbols}")
 
     results = []
@@ -535,7 +664,6 @@ async def run_daily_scan(watchlist: Optional[List[str]] = None) -> dict:
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
-    # Top picks: score >= 9
     top_picks = [r for r in results if r.get("score", 0) >= 9]
     watchable  = [r for r in results if 6 <= r.get("score", 0) < 9]
     avoid      = [r for r in results if r.get("score", 0) < 6]
@@ -549,7 +677,7 @@ async def run_daily_scan(watchlist: Optional[List[str]] = None) -> dict:
         "all_results": results,
     }
 
-    save_daily_result(output)
+    save_daily_result(output, username)
     log.info(f"Daily scan xong — {len(top_picks)} top picks, {len(watchable)} cần theo dõi")
     return output
 
@@ -559,6 +687,13 @@ async def run_daily_scan(watchlist: Optional[List[str]] = None) -> dict:
 # ─────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if USE_DB:
+        try:
+            init_db()
+            # Tạo user "default" cho watchlist/daily picks chung
+            db_exec("INSERT INTO users (username, pin) VALUES ('default','0000') ON CONFLICT DO NOTHING")
+        except Exception as e:
+            log.warning(f"DB init warning: {e}")
     log.info("🚀 Stock Agent AI started")
     yield
     log.info("Stock Agent AI stopped")
@@ -595,41 +730,48 @@ def health():
     return ok({"status": "ok", "version": "2.0.0", "time": datetime.datetime.now().isoformat()})
 
 
+def get_username(request: Request) -> str:
+    """Lấy username từ session, fallback 'default'."""
+    token = request.cookies.get("sa_token") or request.headers.get("X-Token", "")
+    return SESSIONS.get(token, "default")
+
 # ─────────────────────────────────────────────
 # ROUTES — WATCHLIST
 # ─────────────────────────────────────────────
 
 @app.get("/api/watchlist")
-def get_watchlist():
-    return ok({"watchlist": load_watchlist()})
+def get_watchlist(request: Request):
+    return ok({"watchlist": load_watchlist(get_username(request))})
 
 
 @app.post("/api/watchlist")
-async def set_watchlist(body: dict = Body(...)):
+async def set_watchlist(request: Request, body: dict = Body(...)):
     symbols = [s.upper().strip() for s in body.get("symbols", []) if s.strip()]
     if not symbols:
         raise HTTPException(400, "Cần ít nhất 1 mã")
-    save_watchlist(symbols)
+    save_watchlist(symbols, get_username(request))
     return ok({"watchlist": symbols, "count": len(symbols)})
 
 
 @app.post("/api/watchlist/add")
-async def add_to_watchlist(body: dict = Body(...)):
+async def add_to_watchlist(request: Request, body: dict = Body(...)):
     ticker = body.get("ticker", "").upper().strip()
     if not ticker:
         raise HTTPException(400, "Thiếu ticker")
-    wl = load_watchlist()
+    u = get_username(request)
+    wl = load_watchlist(u)
     if ticker not in wl:
         wl.append(ticker)
-        save_watchlist(wl)
+        save_watchlist(wl, u)
     return ok({"watchlist": wl})
 
 
 @app.delete("/api/watchlist/{ticker}")
-async def remove_from_watchlist(ticker: str):
+async def remove_from_watchlist(ticker: str, request: Request):
+    u = get_username(request)
     ticker = ticker.upper()
-    wl = [s for s in load_watchlist() if s != ticker]
-    save_watchlist(wl)
+    wl = [s for s in load_watchlist(u) if s != ticker]
+    save_watchlist(wl, u)
     return ok({"watchlist": wl})
 
 
@@ -638,25 +780,28 @@ async def remove_from_watchlist(ticker: str):
 # ─────────────────────────────────────────────
 
 @app.get("/api/daily-picks")
-def get_daily_picks():
-    result = load_daily_result()
+def get_daily_picks(request: Request):
+    u = get_username(request)
+    result = load_daily_result(u)
     if result:
         return ok(result)
     return ok({"message": "Chưa có kết quả. Gọi /api/scan để chạy ngay.", "top_picks": [], "watchable": [], "avoid": []})
 
 
 @app.post("/api/scan")
-async def trigger_scan(body: dict = Body(default={})):
+async def trigger_scan(request: Request, body: dict = Body(default={})):
     """Trigger scan thủ công. Có thể pass watchlist riêng."""
+    u = get_username(request)
     custom = body.get("watchlist")
-    result = await run_daily_scan(custom)
+    result = await run_daily_scan(custom, username=u)
     return ok(result)
 
 
 @app.get("/api/scan-stream")
-async def scan_stream():
+async def scan_stream(request: Request):
     """SSE: stream từng mã khi scan xong, frontend render ngay."""
-    symbols = load_watchlist()
+    u = get_username(request)
+    symbols = load_watchlist(u)
 
     async def event_gen():
         results = []
@@ -679,7 +824,7 @@ async def scan_stream():
             "avoid": avoid,
             "all_results": results,
         }
-        save_daily_result(output)
+        save_daily_result(output, u)
         yield f"data: {json.dumps({'__done__': True, **output}, ensure_ascii=False)}\n\n"
 
     from fastapi.responses import StreamingResponse
@@ -1288,6 +1433,12 @@ SESSIONS: dict = {}  # token -> username (in-memory, reset khi restart)
 
 
 def load_users() -> dict:
+    if USE_DB:
+        try:
+            rows = db_exec("SELECT username, pin, created_at FROM users", fetch="all")
+            return {r["username"]: {"pin": r["pin"], "created_at": str(r["created_at"])} for r in (rows or [])}
+        except Exception as e:
+            log.warning(f"DB load_users error: {e}")
     if os.path.exists(USERS_FILE):
         try:
             with open(USERS_FILE) as f:
@@ -1298,6 +1449,16 @@ def load_users() -> dict:
 
 
 def save_users(users: dict):
+    if USE_DB:
+        try:
+            for username, info in users.items():
+                db_exec("""
+                    INSERT INTO users (username, pin) VALUES (%s, %s)
+                    ON CONFLICT (username) DO UPDATE SET pin=%s
+                """, (username, info["pin"], info["pin"]))
+            return
+        except Exception as e:
+            log.warning(f"DB save_users error: {e}")
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
@@ -1371,6 +1532,22 @@ def calc_file(username: str) -> str:
 
 
 def load_calc_history(username: str) -> list:
+    if USE_DB:
+        try:
+            rows = db_exec(
+                "SELECT id, type, data, created_at FROM calc_history WHERE username=%s ORDER BY created_at DESC LIMIT 50",
+                (username,), fetch="all"
+            )
+            result = []
+            for r in (rows or []):
+                entry = dict(r["data"])
+                entry["id"] = r["id"]
+                entry["type"] = r["type"]
+                entry["saved_at"] = str(r["created_at"])
+                result.append(entry)
+            return result
+        except Exception as e:
+            log.warning(f"DB load_calc_history error: {e}")
     fp = calc_file(username)
     if os.path.exists(fp):
         try:
@@ -1382,11 +1559,30 @@ def load_calc_history(username: str) -> list:
 
 
 def save_calc_entry(username: str, entry: dict):
-    history = load_calc_history(username)
     entry["saved_at"] = datetime.datetime.now().isoformat()
-    entry["id"] = f"{int(datetime.datetime.now().timestamp()*1000)}"
+    entry_id = f"{int(datetime.datetime.now().timestamp()*1000)}"
+    entry["id"] = entry_id
+    if USE_DB:
+        try:
+            # Đảm bảo user tồn tại
+            db_exec("INSERT INTO users (username, pin) VALUES (%s, '0000') ON CONFLICT DO NOTHING", (username,))
+            data_json = json.dumps(entry, cls=SafeEncoder, ensure_ascii=False)
+            db_exec(
+                "INSERT INTO calc_history (id, username, type, data) VALUES (%s,%s,%s,%s::jsonb)",
+                (entry_id, username, entry.get("type", "unknown"), data_json)
+            )
+            # Giữ tối đa 50
+            db_exec("""
+                DELETE FROM calc_history WHERE username=%s AND id NOT IN (
+                    SELECT id FROM calc_history WHERE username=%s ORDER BY created_at DESC LIMIT 50
+                )
+            """, (username, username))
+            return entry
+        except Exception as e:
+            log.warning(f"DB save_calc_entry error: {e}")
+    history = load_calc_history(username)
     history.insert(0, entry)
-    history = history[:50]  # giữ tối đa 50 bản ghi
+    history = history[:50]
     with open(calc_file(username), "w") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
     return entry
@@ -1548,7 +1744,20 @@ async def delete_calc_entry(entry_id: str, request: Request):
 # ─────────────────────────────────────────────
 DCA_FILE = "dca_portfolio.json"
 
-def load_dca() -> dict:
+def load_dca(username: str = "default") -> dict:
+    if USE_DB:
+        try:
+            rows = db_exec(
+                "SELECT ticker, shares, price, date FROM dca_transactions WHERE username=%s ORDER BY ticker, created_at",
+                (username,), fetch="all"
+            )
+            result = {}
+            for r in (rows or []):
+                t = r["ticker"]
+                result.setdefault(t, []).append({"shares": r["shares"], "price": r["price"], "date": str(r["date"]) if r["date"] else ""})
+            return result
+        except Exception as e:
+            log.warning(f"DB load_dca error: {e}")
     if os.path.exists(DCA_FILE):
         try:
             with open(DCA_FILE) as f:
@@ -1557,25 +1766,42 @@ def load_dca() -> dict:
             pass
     return {}
 
-def save_dca(data: dict):
+def save_dca(data: dict, username: str = "default"):
+    if USE_DB:
+        try:
+            # Xóa toàn bộ transactions cũ của user này
+            db_exec("DELETE FROM dca_transactions WHERE username=%s", (username,))
+            # Đảm bảo user "default" tồn tại
+            db_exec("INSERT INTO users (username, pin) VALUES (%s, '0000') ON CONFLICT DO NOTHING", (username,))
+            for ticker, txs in data.items():
+                for tx in txs:
+                    date = tx.get("date") or None
+                    db_exec(
+                        "INSERT INTO dca_transactions (username, ticker, shares, price, date) VALUES (%s,%s,%s,%s,%s)",
+                        (username, ticker.upper(), float(tx["shares"]), float(tx["price"]), date)
+                    )
+            return
+        except Exception as e:
+            log.warning(f"DB save_dca error: {e}")
     with open(DCA_FILE, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 @app.get("/api/dca")
-def get_dca():
-    return ok(load_dca())
+def get_dca(request: Request):
+    return ok(load_dca(get_username(request)))
 
 @app.post("/api/dca")
-async def save_dca_endpoint(body: dict = Body(...)):
+async def save_dca_endpoint(request: Request, body: dict = Body(...)):
     """Lưu toàn bộ DCA portfolio. body = { ticker: [{ shares, price, date }] }"""
-    save_dca(body)
+    save_dca(body, get_username(request))
     return ok({"ok": True})
 
 @app.delete("/api/dca/{ticker}")
-def delete_dca_ticker(ticker: str):
-    data = load_dca()
+def delete_dca_ticker(ticker: str, request: Request):
+    u = get_username(request)
+    data = load_dca(u)
     data.pop(ticker.upper(), None)
-    save_dca(data)
+    save_dca(data, u)
     return ok({"ok": True})
 
 
