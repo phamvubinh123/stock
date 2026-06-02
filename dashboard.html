@@ -359,6 +359,19 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   .app { grid-template-columns: 1fr; }
   .bottom-nav { display: none; }
 }
+/* ── DCA ── */
+.dca-row { border-bottom: 1px solid var(--border); }
+.dca-row:last-child { border-bottom: none; }
+.dca-header { display:flex; align-items:center; gap:10px; padding:10px 0; cursor:pointer; }
+.dca-ticker { font-weight:700; font-size:.9rem; min-width:48px; }
+.dca-stats { flex:1; display:flex; gap:16px; font-size:.8rem; color:var(--text2); }
+.dca-stat span { font-weight:600; color:var(--text1); }
+.dca-chevron { font-size:.7rem; color:var(--text3); transition:.2s; }
+.dca-children { display:none; padding:0 0 8px 58px; }
+.dca-children.open { display:block; }
+.dca-child { font-size:.76rem; color:var(--text2); padding:3px 0; display:flex; gap:12px; }
+.dca-child-actions { display:flex; gap:6px; margin-left:8px; }
+.dca-form-input { width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:.82rem; }
 </style>
 </head>
 <body>
@@ -601,54 +614,36 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 
         <!-- TAB: TRUNG BÌNH GIÁ -->
         <div id="calc-avg">
-          <div class="card">
-            <div class="card-title">Trung Bình Giá</div>
-            <div class="calc-input-group">
-              <div class="calc-field">
-                <label>Mã cổ phiếu</label>
-                <input type="text" id="avgTicker" placeholder="VD: HPG" style="text-transform:uppercase">
-              </div>
-              <div class="calc-field"></div>
-              <div class="calc-field">
-                <label>Số CP đang giữ</label>
-                <input type="number" id="avgSharesHeld" placeholder="1000" min="1">
-              </div>
-              <div class="calc-field">
-                <label>Giá mua TB hiện tại (nghìn)</label>
-                <input type="number" id="avgPriceHeld" placeholder="50" step="0.1" min="0.1">
-              </div>
-              <div class="calc-field">
-                <label>Số CP muốn mua thêm</label>
-                <input type="number" id="avgSharesBuy" placeholder="500" min="1">
-              </div>
-              <div class="calc-field">
-                <label>Giá mua thêm (nghìn)</label>
-                <input type="number" id="avgPriceBuy" placeholder="40" step="0.1" min="0.1">
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:4px">
-              <button class="btn btn-primary" onclick="calcAvgPrice(false)" style="flex:1">Tính ngay</button>
-              <button class="btn" onclick="calcAvgPrice(true)" style="flex:1" title="Lưu vào lịch sử">💾 Lưu kết quả</button>
+          <!-- Danh sách portfolio -->
+          <div class="card" id="dcaPortfolioCard">
+            <div class="card-title">Danh mục trung bình giá</div>
+            <div id="dcaPortfolioList">
+              <div class="empty" style="font-size:.8rem">Chưa có dữ liệu — thêm giao dịch bên dưới.</div>
             </div>
           </div>
 
-          <div id="avgResult" style="display:none">
-            <div class="card">
-              <div class="card-title">Kết quả</div>
-              <div class="calc-result">
-                <div class="calc-result-main">
-                  <div class="calc-result-num" id="avgNewPrice">—</div>
-                  <div class="calc-result-label">nghìn VNĐ / CP (giá vốn TB mới)</div>
-                </div>
-                <div class="calc-metrics" id="avgMetrics"></div>
-              </div>
-              <div style="margin-top:16px">
-                <div class="card-title">Bảng mô phỏng — nếu mua thêm nhiều hơn</div>
-                <table class="sim-table">
-                  <thead><tr><th>Kịch bản</th><th>Tổng CP</th><th>Tổng vốn (tr)</th><th>Giá vốn TB</th><th>Cần tăng %</th></tr></thead>
-                  <tbody id="avgSimBody"></tbody>
-                </table>
-              </div>
+          <!-- Form thêm giao dịch -->
+          <div class="card">
+            <div class="card-title">Thêm giao dịch</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <label style="font-size:.8rem;color:var(--text2);white-space:nowrap">Mã CP</label>
+              <input type="text" id="dcaFormTicker" placeholder="VD: HPG" maxlength="10"
+                style="text-transform:uppercase;width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:.82rem">
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="dcaFormTable">
+              <thead>
+                <tr style="color:var(--text3);font-size:.72rem">
+                  <th style="text-align:left;padding:4px 8px 4px 0;font-weight:500">Số CP</th>
+                  <th style="text-align:left;padding:4px 8px;font-weight:500">Giá mua (nghìn)</th>
+                  <th style="width:32px"></th>
+                </tr>
+              </thead>
+              <tbody id="dcaFormRows"></tbody>
+            </table>
+            <button class="btn" onclick="dcaAddRow()" style="margin-top:8px;font-size:.78rem">+ Thêm dòng</button>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-primary" onclick="dcaSave()" style="flex:1">💾 Lưu kết quả</button>
+              <button class="btn" onclick="dcaClearForm()" style="flex:1">Xóa form</button>
             </div>
           </div>
         </div>
@@ -1457,9 +1452,128 @@ async function fetchTA() {
 }
 
 // ═══════════════════════════════════════════
+// DCA — TRUNG BÌNH GIÁ PORTFOLIO
+// ═══════════════════════════════════════════
+let dcaData = {}; // { TICKER: [{shares, price, date}] }
+
+async function dcaLoad() {
+  try {
+    const r = await fetch('/api/dca');
+    dcaData = await r.json();
+    dcaRenderPortfolio();
+    dcaInitForm();
+  } catch(e) { console.error('DCA load error', e); }
+}
+
+function dcaCalcAvg(transactions) {
+  const totalShares = transactions.reduce((s, t) => s + t.shares, 0);
+  const totalCost = transactions.reduce((s, t) => s + t.shares * t.price, 0);
+  return { totalShares, avgPrice: totalShares > 0 ? totalCost / totalShares : 0 };
+}
+
+function dcaRenderPortfolio() {
+  const el = document.getElementById('dcaPortfolioList');
+  const tickers = Object.keys(dcaData);
+  if (!tickers.length) {
+    el.innerHTML = `<div class="empty" style="font-size:.8rem">Chưa có dữ liệu — thêm giao dịch bên dưới.</div>`;
+    return;
+  }
+  el.innerHTML = tickers.map(ticker => {
+    const txs = dcaData[ticker] || [];
+    const { totalShares, avgPrice } = dcaCalcAvg(txs);
+    const children = txs.map((t, i) => `
+      <div class="dca-child">
+        <span>Lần ${i+1}:</span>
+        <span><span style="font-weight:600">${t.shares.toLocaleString('vi-VN')}</span> CP</span>
+        <span>@ <span style="font-weight:600">${t.price.toLocaleString('vi-VN', {maximumFractionDigits:1})}</span>k</span>
+        ${t.date ? `<span style="color:var(--text3)">${t.date}</span>` : ''}
+      </div>`).join('');
+    return `
+      <div class="dca-row" id="dca-row-${ticker}">
+        <div class="dca-header" onclick="dcaToggle('${ticker}')">
+          <div class="dca-ticker">${ticker}</div>
+          <div class="dca-stats">
+            <div>Tổng CP: <span>${totalShares.toLocaleString('vi-VN')}</span></div>
+            <div>Giá TB: <span>${avgPrice.toLocaleString('vi-VN', {maximumFractionDigits:1})}k</span></div>
+            <div>Tổng vốn: <span>${(totalShares * avgPrice / 1000).toFixed(0)}tr</span></div>
+          </div>
+          <button class="btn btn-sm" onclick="event.stopPropagation();dcaLoadToForm('${ticker}')" style="font-size:.7rem;padding:3px 8px">+ Thêm GD</button>
+          <button class="btn btn-sm" onclick="event.stopPropagation();dcaDelete('${ticker}')" style="font-size:.7rem;padding:3px 8px;color:var(--red);border-color:var(--red)">Xóa</button>
+          <span class="dca-chevron" id="dca-chev-${ticker}">▼</span>
+        </div>
+        <div class="dca-children" id="dca-children-${ticker}">${children}</div>
+      </div>`;
+  }).join('');
+}
+
+function dcaToggle(ticker) {
+  const el = document.getElementById(`dca-children-${ticker}`);
+  const chev = document.getElementById(`dca-chev-${ticker}`);
+  el.classList.toggle('open');
+  chev.style.transform = el.classList.contains('open') ? 'rotate(180deg)' : '';
+}
+
+function dcaInitForm(rows = 2) {
+  const tbody = document.getElementById('dcaFormRows');
+  tbody.innerHTML = '';
+  for (let i = 0; i < rows; i++) dcaAddRow();
+}
+
+function dcaAddRow(shares = '', price = '') {
+  const tbody = document.getElementById('dcaFormRows');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="padding:3px 8px 3px 0"><input type="number" class="dca-form-input dca-shares" placeholder="1000" min="1" value="${shares}"></td>
+    <td style="padding:3px 8px"><input type="number" class="dca-form-input dca-price" placeholder="50.0" step="0.1" min="0.1" value="${price}"></td>
+    <td><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:1rem">×</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function dcaClearForm() {
+  document.getElementById('dcaFormTicker').value = '';
+  dcaInitForm();
+}
+
+function dcaLoadToForm(ticker) {
+  document.getElementById('dcaFormTicker').value = ticker;
+  const tbody = document.getElementById('dcaFormRows');
+  tbody.innerHTML = '';
+  (dcaData[ticker] || []).forEach(t => dcaAddRow(t.shares, t.price));
+  dcaAddRow(); // dòng trống để thêm mới
+  // Scroll xuống form
+  document.getElementById('dcaFormTicker').scrollIntoView({behavior:'smooth'});
+}
+
+async function dcaSave() {
+  const ticker = document.getElementById('dcaFormTicker').value.trim().toUpperCase();
+  if (!ticker) { alert('Vui lòng nhập Mã CP'); return; }
+  const rows = document.querySelectorAll('#dcaFormRows tr');
+  const txs = [];
+  const today = new Date().toISOString().slice(0,10);
+  rows.forEach(tr => {
+    const shares = parseFloat(tr.querySelector('.dca-shares')?.value);
+    const price = parseFloat(tr.querySelector('.dca-price')?.value);
+    if (shares > 0 && price > 0) txs.push({ shares, price, date: today });
+  });
+  if (!txs.length) { alert('Vui lòng nhập ít nhất 1 dòng hợp lệ'); return; }
+  dcaData[ticker] = txs;
+  await fetch('/api/dca', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dcaData) });
+  dcaRenderPortfolio();
+  dcaClearForm();
+}
+
+async function dcaDelete(ticker) {
+  if (!confirm(`Xóa ${ticker} khỏi danh sách?`)) return;
+  delete dcaData[ticker];
+  await fetch(`/api/dca/${ticker}`, { method:'DELETE' });
+  dcaRenderPortfolio();
+}
+
+// ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
 checkSession();
+dcaLoad();
 </script>
 </body>
 </html>

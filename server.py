@@ -1543,6 +1543,42 @@ async def delete_calc_entry(entry_id: str, request: Request):
     return ok({"ok": True})
 
 
+# ─────────────────────────────────────────────
+# DCA PORTFOLIO
+# ─────────────────────────────────────────────
+DCA_FILE = "dca_portfolio.json"
+
+def load_dca() -> dict:
+    if os.path.exists(DCA_FILE):
+        try:
+            with open(DCA_FILE) as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_dca(data: dict):
+    with open(DCA_FILE, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.get("/api/dca")
+def get_dca():
+    return ok(load_dca())
+
+@app.post("/api/dca")
+async def save_dca_endpoint(body: dict = Body(...)):
+    """Lưu toàn bộ DCA portfolio. body = { ticker: [{ shares, price, date }] }"""
+    save_dca(body)
+    return ok({"ok": True})
+
+@app.delete("/api/dca/{ticker}")
+def delete_dca_ticker(ticker: str):
+    data = load_dca()
+    data.pop(ticker.upper(), None)
+    save_dca(data)
+    return ok({"ok": True})
+
+
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "=" * 55)
