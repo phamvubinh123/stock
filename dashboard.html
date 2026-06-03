@@ -2406,7 +2406,22 @@ async function triggerRadar() {
   picks.style.display = 'none';
   try {
     const r = await fetch('/api/radar', { headers: {'X-Token': authToken} });
+    if (!r.ok) { const txt = await r.text(); throw new Error(`Server ${r.status}: ${txt.slice(0,80)}`); }
     const d = await r.json();
+
+    // Đang build cache lần đầu → hiện thông báo và poll lại
+    if (d.loading) {
+      container.innerHTML = `<div class="empty" style="padding:24px;text-align:center">
+        <div style="font-size:1.4rem;margin-bottom:8px">⏳</div>
+        <div style="font-weight:600;margin-bottom:4px">Đang khởi tạo dữ liệu...</div>
+        <div style="font-size:.8rem;color:var(--text3)">${d.message||'Vui lòng chờ ~60 giây'}</div>
+      </div>`;
+      container.style.display = 'block';
+      btn.disabled = false; btn.innerHTML = '🔍 Scan';
+      setTimeout(() => triggerRadar(), 8000);
+      return;
+    }
+
     const results = d.results || [];
     if (!results.length) {
       container.innerHTML = '<div class="empty">Watchlist trống — thêm mã trước</div>';
