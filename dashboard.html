@@ -541,9 +541,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 
     <!-- Sub-navs -->
     <nav class="page-sub-nav" id="subNavKhamPha">
-      <button class="page-sub-tab active" data-sub="daily" onclick="showSubPage('khampha','daily',this)">🔍 Scan</button>
-      <button class="page-sub-tab" data-sub="buffett" onclick="showSubPage('khampha','buffett',this)">🔬 Phân Tích</button>
-      <button class="page-sub-tab" data-sub="technical" onclick="showSubPage('khampha','technical',this)">📈 Chart KT</button>
+      <button class="page-sub-tab active" data-sub="daily" onclick="showSubPage('khampha','daily',this)">📋 Watch List</button>
+      <button class="page-sub-tab" data-sub="buffett" onclick="showSubPage('khampha','buffett',this)">🔬 Phân tích cơ bản</button>
+      <button class="page-sub-tab" data-sub="technical" onclick="showSubPage('khampha','technical',this)">📈 Phân tích kỹ thuật</button>
     </nav>
     <nav class="page-sub-nav" id="subNavDanhMuc" style="display:none">
       <button class="page-sub-tab active" data-sub="portfolio" onclick="showSubPage('danhmuc','portfolio',this)">💼 Danh Mục</button>
@@ -2460,9 +2460,10 @@ async function triggerRadar() {
         <td style="text-align:right;padding:9px 4px;font-size:.78rem;color:var(--muted)">${sig.ichi_label || '—'}</td>
         <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1) : '—'}</td>
         <td style="text-align:center;padding:9px 6px">
-          <span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:.75rem;font-weight:700;
-            background:${ac.bg};color:${ac.fg};cursor:pointer" onclick="openInBuffett('${r.ticker}')">${sig.action}</span>
-          <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Phân tích</button>
+          <span style="display:inline-block;padding:4px 10px;border-radius:12px;font-size:.75rem;font-weight:700;
+            background:${ac.bg};color:${ac.fg}">${sig.action}</span>
+          <button class="btn-row" style="margin-left:4px" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
+          <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
         </td>
       </tr>`;
     });
@@ -2700,15 +2701,39 @@ const VN100_LIST = [
   {sym:"BMP",name:"Nhựa Bình Minh"},{sym:"DHC",name:"Đông Hải Bến Tre"},
   {sym:"VCS",name:"Vicostone"},{sym:"PPC",name:"Nhiệt điện Phả Lại"},
   {sym:"TCH",name:"Hoàng Huy"},{sym:"NLG",name:"Nam Long"},
+  {sym:"MWG",name:"Thế Giới Di Động"},{sym:"FRT",name:"FPT Retail"},
+  {sym:"MBS",name:"Chứng khoán MB"},{sym:"BSR",name:"Lọc hóa dầu Bình Sơn"},
+  {sym:"OIL",name:"PV Oil"},{sym:"GMB",name:"Cơ khí May"},
+  {sym:"ACV",name:"Cảng hàng không Việt Nam"},{sym:"CTR",name:"Viettel Construction"},
+  {sym:"VTP",name:"Viettel Post"},{sym:"ANV",name:"Nam Việt"},
+  {sym:"DCM",name:"Phân bón Cà Mau"},{sym:"DPM",name:"Đạm Phú Mỹ"},
+  {sym:"PHR",name:"Cao su Phước Hòa"},{sym:"TLG",name:"Thiên Long"},
+  {sym:"QNS",name:"Đường Quảng Ngãi"},{sym:"SCS",name:"Dịch vụ hàng hóa Sài Gòn"},
+  {sym:"CAV",name:"Dây cáp điện Việt Nam"},{sym:"TNH",name:"Bệnh viện Thu Cúc"},
+  {sym:"AAA",name:"Nhựa An Phát Xanh"},{sym:"HAX",name:"Dịch vụ ô tô Hàng Xanh"},
+  {sym:"TNG",name:"Đầu tư và TM TNG"},{sym:"PTB",name:"Phú Tài"},
+  {sym:"SGN",name:"Phục vụ mặt đất Sài Gòn"},{sym:"CII",name:"Đầu tư hạ tầng kỹ thuật"},
+  {sym:"LCG",name:"LecGroup"},{sym:"VHC",name:"Vĩnh Hoàn"},
+  {sym:"MSH",name:"May Sông Hồng"},{sym:"FMC",name:"Thực phẩm Sao Ta"},
 ];
 
 function showAutocomplete(val) {
   const q = val.trim().toUpperCase();
   const dropdown = document.getElementById('autocompleteList');
   if (!q) { dropdown.style.display = 'none'; return; }
-  const matches = VN100_LIST.filter(s =>
-    s.sym.startsWith(q) || s.sym.includes(q) || s.name.toUpperCase().includes(q)
-  ).slice(0, 8);
+
+  // Gộp VN100_LIST + watchlist hiện tại (mã chưa có trong list)
+  const wlTickers = Array.from(document.querySelectorAll('#wlTags .wl-tag'))
+    .map(el => el.textContent.replace('×','').trim())
+    .filter(t => t && !VN100_LIST.find(s => s.sym === t))
+    .map(t => ({sym: t, name: '(trong watchlist)'}));
+  const fullList = [...VN100_LIST, ...wlTickers];
+
+  // Ưu tiên: bắt đầu bằng q > chứa q > tên chứa q
+  const startsWith = fullList.filter(s => s.sym.startsWith(q));
+  const contains   = fullList.filter(s => !s.sym.startsWith(q) && (s.sym.includes(q) || s.name.toUpperCase().includes(q)));
+  const matches = [...startsWith, ...contains].slice(0, 12);
+
   if (!matches.length) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = matches.map(s =>
     `<div class="autocomplete-item" onclick="addTicker('${s.sym}')">
