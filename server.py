@@ -2441,70 +2441,74 @@ def compute_technical_sync(ticker: str, period: int = 90) -> dict:
         log.warning(f"compute_technical_sync {ticker}: {e}")
         return {}
 
+def _radar_sync(username: str) -> dict:
+    """Sync scan — chạy trong thread pool, tránh asyncio complexity."""
+    import concurrent.futures, time
+
+    watchlist = load_watchlist(username)
+    if not watchlist:
+        return {"results": [], "updated_at": datetime.datetime.now().isoformat()}
+
+    # Đọc cache
+    cache_map = {}
+    updated_at = datetime.datetime.now().isoformat()
+    if os.path.exists(VN30_RADAR_CACHE):
+        try:
+            with open(VN30_RADAR_CACHE) as f:
+                cache = json.load(f)
+            cache_map = {r["ticker"]: r for r in cache.get("results", [])}
+            updated_at = cache.get("updated_at", updated_at)
+        except Exception as e:
+            log.warning(f"Cache read: {e}")
+
+    def _placeholder(ticker):
+        return {"ticker": ticker,
+                "signal": {"combined":0,"action":"—","color":"gray","ichi_label":"—","ta_score":0,"fundamental":0},
+                "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
+
+    def _scan_one(ticker):
+        if ticker in cache_map:
+            return cache_map[ticker]
+        try:
+            scan_r  = scan_one_ticker(ticker)
+            ta_data = compute_technical_sync(ticker)
+            signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+            return {"ticker": ticker, "signal": signal,
+                    "buffett_score": scan_r.get("score", 0),
+                    "price": (ta_data.get("latest") or {}).get("close"),
+                    "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                    "key_metrics": scan_r.get("key_metrics", {})}
+        except Exception as e:
+            log.warning(f"Radar {ticker}: {e}")
+            return _placeholder(ticker)
+
+    # Scan song song, max 6 mã realtime, timeout tổng 20s
+    cached  = [t for t in watchlist if t in cache_map]
+    realtime = [t for t in watchlist if t not in cache_map][:6]
+    to_scan = cached + realtime
+
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+        futures = {ex.submit(_scan_one, t): t for t in to_scan}
+        done, not_done = concurrent.futures.wait(futures, timeout=20)
+        for f in done:
+            try: results.append(f.result())
+            except: pass
+        for f in not_done:
+            f.cancel()
+            results.append(_placeholder(futures[f]))
+
+    results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
+    return {"results": results, "updated_at": updated_at, "from_cache": bool(cache_map)}
+
+
 @app.get("/api/radar")
 async def get_radar(request: Request):
-    """Scan watchlist với timeout ngắn — luôn trả kết quả, không bao giờ trả loading."""
     try:
         u = get_username(request)
-        watchlist = load_watchlist(u)
-        if not watchlist:
-            return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
-
-        # Đọc cache cho các mã VN30
-        cache_map = {}
-        updated_at = datetime.datetime.now().isoformat()
-        if os.path.exists(VN30_RADAR_CACHE):
-            try:
-                with open(VN30_RADAR_CACHE) as f:
-                    cache = json.load(f)
-                cache_map = {r["ticker"]: r for r in cache.get("results", [])}
-                updated_at = cache.get("updated_at", updated_at)
-            except Exception as e:
-                log.warning(f"Cache read: {e}")
-
         loop = asyncio.get_running_loop()
-        sem  = asyncio.Semaphore(3)
-
-        # Tách mã có cache vs không — giới hạn realtime tối đa 6 mã tránh timeout
-        cached_tickers  = [t for t in watchlist if t in cache_map]
-        realtime_tickers = [t for t in watchlist if t not in cache_map][:6]
-        all_tickers = cached_tickers + realtime_tickers
-
-        def _make_placeholder(ticker):
-            return {"ticker": ticker, "signal": {"combined": 0, "action": "—", "color": "gray",
-                    "ichi_label": "—", "ta_score": 0, "fundamental": 0},
-                    "buffett_score": 0, "price": None, "volume_warning": None, "key_metrics": {}}
-
-        async def _process(ticker: str):
-            if ticker in cache_map:
-                return cache_map[ticker]
-            async with sem:
-                try:
-                    scan_r  = await asyncio.wait_for(
-                        loop.run_in_executor(None, scan_one_ticker, ticker), timeout=10)
-                    ta_data = await asyncio.wait_for(
-                        loop.run_in_executor(None, compute_technical_sync, ticker), timeout=10)
-                    signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
-                    return {"ticker": ticker, "signal": signal,
-                            "buffett_score": scan_r.get("score", 0),
-                            "price": (ta_data.get("latest") or {}).get("close"),
-                            "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                            "key_metrics": scan_r.get("key_metrics", {})}
-                except Exception as e:
-                    log.warning(f"Radar {ticker}: {e}")
-                    return _make_placeholder(ticker)
-
-        try:
-            results = list(await asyncio.wait_for(
-                asyncio.gather(*[_process(t) for t in all_tickers]),
-                timeout=22))
-        except Exception:
-            # Timeout tổng — trả cache có sẵn + placeholder cho phần còn lại
-            results = [cache_map[t] if t in cache_map else _make_placeholder(t)
-                       for t in all_tickers]
-
-        results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
-        return ok({"results": results, "updated_at": updated_at, "from_cache": bool(cache_map)})
+        data = await loop.run_in_executor(None, _radar_sync, u)
+        return ok(data)
     except Exception as e:
         log.error(f"Radar error: {e}", exc_info=True)
         return ok({"results": [], "error": str(e), "updated_at": datetime.datetime.now().isoformat()})

@@ -1218,14 +1218,6 @@ function quickSearch(val) {
   fetchData();
 }
 
-function loadWatchlistTags() {
-  fetch('/api/watchlist').then(r=>r.json()).then(d=>{
-    const tags = document.getElementById('wlTags');
-    if (!tags) return;
-    const wl = d.watchlist || [];
-    tags.innerHTML = wl.map(t=>`<span class="wl-tag" onclick="openInBuffett('${t}')">${t}<button onclick="event.stopPropagation();removeFromWl('${t}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:0 0 0 4px;font-size:.7rem">×</button></span>`).join('');
-  }).catch(()=>{});
-}
 
 // ═══════════════════════════════════════════
 // CALCULATOR
@@ -1757,20 +1749,39 @@ function analyze() {
 // ═══════════════════════════════════════════
 // WATCHLIST
 // ═══════════════════════════════════════════
+const _wlHeaders = () => ({'Content-Type':'application/json','X-Token':authToken});
+
 async function loadWatchlist() {
-  try { const r=await fetch('/api/watchlist'); const d=await r.json(); renderWlTags(d.watchlist||[]); } catch {}
+  try {
+    const r = await fetch('/api/watchlist', {headers: _wlHeaders()});
+    const d = await r.json();
+    renderWlTags(d.watchlist || []);
+  } catch {}
 }
 function renderWlTags(wl) {
-  document.getElementById('wlTags').innerHTML=wl.map(t=>`<div class="wl-tag">${t}<span class="wl-tag-x" onclick="removeWl('${t}')">×</span></div>`).join('');
+  const el = document.getElementById('wlTags');
+  if (!el) return;
+  el.innerHTML = wl.map(t =>
+    `<div class="wl-tag">${t}<span class="wl-tag-x" onclick="removeWl('${t}')">×</span></div>`
+  ).join('');
 }
-async function addToWl() {
-  const inp=document.getElementById('wlInput'), t=inp.value.trim().toUpperCase();
-  if(!t) return; inp.value='';
-  try { const r=await fetch('/api/watchlist/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:t})}); const d=await r.json(); renderWlTags(d.watchlist||[]); }
-  catch(e){alert('Lỗi: '+e.message);}
+async function addToWl(ticker) {
+  const t = (ticker || document.getElementById('wlInput')?.value || '').trim().toUpperCase();
+  if (!t) return;
+  const inp = document.getElementById('wlInput');
+  if (inp) inp.value = '';
+  try {
+    const r = await fetch('/api/watchlist/add', {method:'POST', headers: _wlHeaders(), body: JSON.stringify({ticker: t})});
+    const d = await r.json();
+    renderWlTags(d.watchlist || []);
+  } catch(e) { console.error('addToWl:', e); }
 }
 async function removeWl(ticker) {
-  try { const r=await fetch('/api/watchlist/'+ticker,{method:'DELETE'}); const d=await r.json(); renderWlTags(d.watchlist||[]); } catch {}
+  try {
+    const r = await fetch('/api/watchlist/'+ticker, {method:'DELETE', headers: _wlHeaders()});
+    const d = await r.json();
+    renderWlTags(d.watchlist || []);
+  } catch {}
 }
 
 // ═══════════════════════════════════════════
@@ -2713,12 +2724,7 @@ async function addAndScan(ticker) {
   const inp = document.getElementById('radarSearch');
   if (inp) inp.value = '';
   document.getElementById('autocompleteList').style.display = 'none';
-  await fetch('/api/watchlist/add', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Token':authToken},
-    body:JSON.stringify({ticker:t})
-  });
-  loadWatchlistTags();
+  await addToWl(t);
   triggerRadar();
 }
 
