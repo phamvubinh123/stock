@@ -1499,3 +1499,326 @@ Update hàm showPage() trong dashboard.html — thêm vào cuối hàm:
 - [ ] Scroll mượt
 
 Sau khi làm xong báo lại để test trên điện thoại thật.
+
+---
+
+## 🎯 RADAR REDESIGN — UX Đơn Giản Hóa
+
+### Vấn đề hiện tại
+- Sidebar 6 mục quá nhiều → gộp còn 3
+- Header search thừa, trùng với ô thêm mã bên dưới → bỏ
+- Watchlist trống khi mới vào → user không biết làm gì
+- Scan chậm vì chạy realtime → dùng pre-computed cache
+
+---
+
+### THAY ĐỔI 1 — Navigation gộp còn 3 module
+
+Bỏ: Alerts (gộp vào Danh Mục), Chart KT (gộp vào Phân Tích)
+
+Sidebar mới:
+- 🔍 Khám Phá  ← Radar + Phân Tích + Chart KT
+- 💼 Danh Mục  ← Portfolio + Alerts
+- 🧮 Công Cụ   ← Calculator + Lịch sử
+
+---
+
+### THAY ĐỔI 2 — Bỏ header search bar
+
+Xóa ô search trong app-header khỏi dashboard.html.
+Giữ lại avatar, icon scan, icon notification thôi.
+Việc tìm mã và thêm watchlist gộp vào 1 ô duy nhất trong Radar.
+
+---
+
+### THAY ĐỔI 3 — Ô tìm mã duy nhất trong Radar
+
+Logic:
+- Gõ mã → autocomplete gợi ý tên công ty
+- Enter hoặc click gợi ý → thêm vào watchlist → scan mã đó luôn
+- 1 hành động duy nhất, không cần nút riêng
+
+HTML:
+
+```html
+<div class="search-add-wrap">
+  <input type="text" id="radarSearch" 
+    placeholder="🔍 Tìm mã hoặc tên công ty... (VD: FPT, Vinamilk)"
+    autocomplete="off"
+    oninput="showAutocomplete(this.value)"
+    onkeydown="if(event.key==='Enter') addAndScan(this.value)">
+  <div id="autocompleteList" class="autocomplete-dropdown"></div>
+</div>
+```
+
+CSS:
+
+```css
+.search-add-wrap {
+  position: relative;
+  margin-bottom: 14px;
+}
+.search-add-wrap input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: .9rem;
+  background: #fff;
+  outline: none;
+  transition: border-color .15s;
+}
+.search-add-wrap input:focus { border-color: var(--purple); }
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  z-index: 100;
+  display: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.autocomplete-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: .85rem;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.autocomplete-item:hover { background: var(--purple-light); }
+.autocomplete-item .sym { font-weight: 700; color: var(--purple); width: 48px; }
+.autocomplete-item .name { color: var(--text2); }
+```
+
+JS — Autocomplete từ danh sách VN100 hardcode:
+
+```javascript
+const VN100_LIST = [
+  {sym:"ACB",name:"Ngân hàng ACB"},
+  {sym:"BCM",name:"Becamex IDC"},
+  {sym:"BID",name:"Ngân hàng BIDV"},
+  {sym:"BVH",name:"Tập đoàn Bảo Việt"},
+  {sym:"CTG",name:"Ngân hàng VietinBank"},
+  {sym:"FPT",name:"Tập đoàn FPT"},
+  {sym:"GAS",name:"PV GAS"},
+  {sym:"GVR",name:"Tập đoàn Công nghiệp Cao su"},
+  {sym:"HDB",name:"Ngân hàng HDBank"},
+  {sym:"HPG",name:"Tập đoàn Hòa Phát"},
+  {sym:"MBB",name:"Ngân hàng MBBank"},
+  {sym:"MSN",name:"Tập đoàn Masan"},
+  {sym:"MWG",name:"Thế Giới Di Động"},
+  {sym:"NVL",name:"Novaland"},
+  {sym:"PDR",name:"Phát Đạt"},
+  {sym:"PLX",name:"Petrolimex"},
+  {sym:"POW",name:"PV Power"},
+  {sym:"SAB",name:"Sabeco"},
+  {sym:"SHB",name:"Ngân hàng SHB"},
+  {sym:"SSB",name:"Ngân hàng SeABank"},
+  {sym:"SSI",name:"Chứng khoán SSI"},
+  {sym:"STB",name:"Ngân hàng Sacombank"},
+  {sym:"TCB",name:"Ngân hàng Techcombank"},
+  {sym:"TPB",name:"Ngân hàng TPBank"},
+  {sym:"VCB",name:"Ngân hàng Vietcombank"},
+  {sym:"VHM",name:"Vinhomes"},
+  {sym:"VIB",name:"Ngân hàng VIB"},
+  {sym:"VIC",name:"Tập đoàn Vingroup"},
+  {sym:"VJC",name:"Vietjet Air"},
+  {sym:"VNM",name:"Vinamilk"},
+  {sym:"VPB",name:"Ngân hàng VPBank"},
+  {sym:"VRE",name:"Vincom Retail"},
+  {sym:"VSH",name:"Thủy điện Vĩnh Sơn"},
+  {sym:"VTO",name:"Vận tải Xăng dầu Vitaco"},
+  {sym:"DGC",name:"Hóa chất Đức Giang"},
+  {sym:"DXG",name:"Đất Xanh Group"},
+  {sym:"EIB",name:"Ngân hàng Eximbank"},
+  {sym:"EVF",name:"Tài chính Điện lực"},
+  {sym:"GEX",name:"Tập đoàn Gelex"},
+  {sym:"GMD",name:"Gemadept"},
+  {sym:"HAG",name:"Hoàng Anh Gia Lai"},
+  {sym:"HCM",name:"Chứng khoán HCM"},
+  {sym:"HDG",name:"Tập đoàn Hà Đô"},
+  {sym:"HSG",name:"Hoa Sen Group"},
+  {sym:"IDC",name:"Kinh doanh và Phát triển Bình Dương"},
+  {sym:"IMP",name:"Imexpharm"},
+  {sym:"KBC",name:"Khu công nghiệp Kinh Bắc"},
+  {sym:"KDH",name:"Khang Điền"},
+  {sym:"LPB",name:"Ngân hàng LienVietPostBank"},
+  {sym:"NAB",name:"Ngân hàng Nam Á"},
+  {sym:"OCB",name:"Ngân hàng OCB"},
+  {sym:"PNJ",name:"Vàng bạc Đá quý Phú Nhuận"},
+  {sym:"PVD",name:"PV Drilling"},
+  {sym:"PVT",name:"Vận tải Dầu khí"},
+  {sym:"REE",name:"Cơ điện lạnh REE"},
+  {sym:"SBT",name:"Đường TTC Biên Hòa"},
+  {sym:"VCI",name:"Chứng khoán Vietcap"},
+  {sym:"VGC",name:"Viglacera"},
+  {sym:"VGI",name:"Viettel Global"},
+  {sym:"VHC",name:"Vĩnh Hoàn"},
+  {sym:"VND",name:"Chứng khoán VNDirect"},
+  {sym:"VPI",name:"Văn Phú Invest"},
+];
+
+function showAutocomplete(val) {
+  const q = val.trim().toUpperCase();
+  const dropdown = document.getElementById('autocompleteList');
+  if (!q || q.length < 1) { dropdown.style.display = 'none'; return; }
+  const matches = VN100_LIST.filter(s =>
+    s.sym.includes(q) || s.name.toUpperCase().includes(q)
+  ).slice(0, 8);
+  if (!matches.length) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = matches.map(s =>
+    `<div class="autocomplete-item" onclick="addAndScan('${s.sym}')">
+      <span class="sym">${s.sym}</span>
+      <span class="name">${s.name}</span>
+    </div>`
+  ).join('');
+  dropdown.style.display = 'block';
+}
+
+async function addAndScan(ticker) {
+  const t = ticker.trim().toUpperCase();
+  if (!t) return;
+  document.getElementById('radarSearch').value = '';
+  document.getElementById('autocompleteList').style.display = 'none';
+  // Thêm vào watchlist
+  await fetch('/api/watchlist/add', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-Token': authToken},
+    body: JSON.stringify({ticker: t})
+  });
+  // Reload radar
+  loadRadar();
+}
+
+// Đóng dropdown khi click ra ngoài
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-add-wrap')) {
+    document.getElementById('autocompleteList').style.display = 'none';
+  }
+});
+```
+
+---
+
+### THAY ĐỔI 4 — Default VN30 Top 10 khi watchlist trống
+
+```python
+VN30_TOP10 = ["VCB","BID","CTG","FPT","MWG","HPG","GAS","VIC","VHM","MSN"]
+
+def load_watchlist(username: str) -> list:
+    fp = f"watchlist_{username}.json"
+    if os.path.exists(fp):
+        try:
+            with open(fp) as f:
+                wl = json.load(f)
+                if wl: return wl
+        except: pass
+    # Watchlist trống → trả về VN30 top 10 mặc định
+    return VN30_TOP10
+```
+
+---
+
+### THAY ĐỔI 5 — Pre-computed Radar Cache
+
+Scheduler chạy lúc 8:00 sáng mỗi ngày (giờ VN), scan VN30_TOP10 + watchlist của tất cả users, lưu vào cache:
+
+```python
+# File: vn30_radar_cache.json
+{
+  "updated_at": "2025-06-03T08:00:00",
+  "results": [
+    {
+      "ticker": "FPT",
+      "signal": {"combined": 85, "action": "XEM", "color": "green"},
+      "buffett_score": 11,
+      "price": 125000,
+      "ichi_label": "Trên mây",
+      "volume_warning": null
+    },
+    ...
+  ]
+}
+
+# Scheduler job
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+scheduler = AsyncIOScheduler(timezone="Asia/Ho_Chi_Minh")
+
+@scheduler.scheduled_job(CronTrigger(hour=8, minute=0))
+async def daily_vn30_scan():
+    results = []
+    for ticker in VN30_TOP10:
+        try:
+            score  = compute_buffett_score(ticker)
+            ta     = compute_technical(ticker, period=90)
+            signal = calc_combined_signal(score["score"], ta)
+            results.append({
+                "ticker": ticker,
+                "signal": signal,
+                "buffett_score": score["score"],
+                "price": ta["latest"].get("close"),
+                "ichi_label": signal["ichi_label"],
+                "volume_warning": ta.get("volume_signal", {}).get("warning"),
+            })
+            await asyncio.sleep(1)  # tránh spam API
+        except Exception as e:
+            print(f"Scan {ticker} lỗi: {e}")
+    results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
+    with open("vn30_radar_cache.json", "w") as f:
+        json.dump({"updated_at": datetime.datetime.now().isoformat(),
+                   "results": results}, f, ensure_ascii=False, cls=SafeEncoder)
+
+# Endpoint Radar đọc từ cache trước, fallback realtime
+@app.get("/api/radar")
+async def get_radar(request: Request):
+    user = get_current_user(request)
+    watchlist = load_watchlist(user)
+
+    # Load VN30 cache
+    vn30_results = []
+    if os.path.exists("vn30_radar_cache.json"):
+        with open("vn30_radar_cache.json") as f:
+            cache = json.load(f)
+            vn30_results = cache.get("results", [])
+            updated_at   = cache.get("updated_at")
+
+    # Merge watchlist cá nhân (ưu tiên hiện trước)
+    wl_tickers = set(watchlist) - set(VN30_TOP10)
+    wl_results = []
+    for ticker in wl_tickers:
+        try:
+            score  = compute_buffett_score(ticker)
+            ta     = compute_technical(ticker, period=90)
+            signal = calc_combined_signal(score["score"], ta)
+            wl_results.append({
+                "ticker": ticker,
+                "signal": signal,
+                "buffett_score": score["score"],
+                "price": ta["latest"].get("close"),
+                "ichi_label": signal["ichi_label"],
+                "volume_warning": ta.get("volume_signal",{}).get("warning"),
+                "in_watchlist": True,
+            })
+        except: pass
+
+    all_results = wl_results + vn30_results
+    return ok({"results": all_results, "updated_at": updated_at})
+```
+
+---
+
+### CHECKLIST
+
+- [ ] Gộp sidebar còn 3 module: Khám Phá, Danh Mục, Công Cụ
+- [ ] Xóa header search bar
+- [ ] Thêm ô tìm mã + autocomplete VN100 vào Radar
+- [ ] Default VN30 top 10 khi watchlist trống
+- [ ] Pre-computed cache scan VN30 lúc 8:00 sáng
+- [ ] Scheduler chạy khi server start
+- [ ] Test autocomplete gõ tên tiếng Việt + mã
