@@ -2465,36 +2465,44 @@ async def get_radar(request: Request):
         loop = asyncio.get_running_loop()
         sem  = asyncio.Semaphore(3)
 
+        # Tách mã có cache vs không — giới hạn realtime tối đa 6 mã tránh timeout
+        cached_tickers  = [t for t in watchlist if t in cache_map]
+        realtime_tickers = [t for t in watchlist if t not in cache_map][:6]
+        all_tickers = cached_tickers + realtime_tickers
+
+        def _make_placeholder(ticker):
+            return {"ticker": ticker, "signal": {"combined": 0, "action": "—", "color": "gray",
+                    "ichi_label": "—", "ta_score": 0, "fundamental": 0},
+                    "buffett_score": 0, "price": None, "volume_warning": None, "key_metrics": {}}
+
         async def _process(ticker: str):
-            # Dùng cache nếu có
             if ticker in cache_map:
                 return cache_map[ticker]
-            # Scan realtime với timeout 12s/bước
             async with sem:
                 try:
-                    scan_r = await asyncio.wait_for(
-                        loop.run_in_executor(None, scan_one_ticker, ticker), timeout=12)
+                    scan_r  = await asyncio.wait_for(
+                        loop.run_in_executor(None, scan_one_ticker, ticker), timeout=10)
                     ta_data = await asyncio.wait_for(
-                        loop.run_in_executor(None, compute_technical_sync, ticker), timeout=12)
-                    signal = calc_combined_signal(scan_r.get("score", 0), ta_data)
-                    return {
-                        "ticker": ticker, "signal": signal,
-                        "buffett_score": scan_r.get("score", 0),
-                        "price": (ta_data.get("latest") or {}).get("close"),
-                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                        "key_metrics": scan_r.get("key_metrics", {}),
-                    }
+                        loop.run_in_executor(None, compute_technical_sync, ticker), timeout=10)
+                    signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+                    return {"ticker": ticker, "signal": signal,
+                            "buffett_score": scan_r.get("score", 0),
+                            "price": (ta_data.get("latest") or {}).get("close"),
+                            "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                            "key_metrics": scan_r.get("key_metrics", {})}
                 except Exception as e:
                     log.warning(f"Radar {ticker}: {e}")
-                    return {
-                        "ticker": ticker,
-                        "signal": {"combined": 0, "action": "—", "color": "gray",
-                                   "ichi_label": "Lỗi", "ta_score": 0, "fundamental": 0},
-                        "buffett_score": 0, "price": None,
-                        "volume_warning": None, "key_metrics": {},
-                    }
+                    return _make_placeholder(ticker)
 
-        results = list(await asyncio.gather(*[_process(t) for t in watchlist]))
+        try:
+            results = list(await asyncio.wait_for(
+                asyncio.gather(*[_process(t) for t in all_tickers]),
+                timeout=22))
+        except Exception:
+            # Timeout tổng — trả cache có sẵn + placeholder cho phần còn lại
+            results = [cache_map[t] if t in cache_map else _make_placeholder(t)
+                       for t in all_tickers]
+
         results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
         return ok({"results": results, "updated_at": updated_at, "from_cache": bool(cache_map)})
     except Exception as e:
