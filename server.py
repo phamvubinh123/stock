@@ -250,11 +250,11 @@ def save_daily_result(data, username: str = "default"):
 # ─────────────────────────────────────────────
 # VNSTOCK HELPERS
 # ─────────────────────────────────────────────
-def get_vnstock():
-    """Import Vnstock từ vnstock 4.x."""
+def get_finance():
+    """Import Finance từ vnstock 4.x (thay thế Vnstock().stock().finance)."""
     try:
-        from vnstock import Vnstock
-        return Vnstock
+        from vnstock import Finance
+        return Finance
     except (ImportError, ModuleNotFoundError):
         raise HTTPException(503, "Chưa cài vnstock. Chạy: pip install vnstock --upgrade")
 
@@ -510,9 +510,8 @@ def compute_buffett_score(data: dict, n: int = 5) -> dict:
 def scan_one_ticker(ticker: str) -> dict:
     """Scan 1 mã (sync), trả về dict tóm tắt."""
     try:
-        Vnstock = get_vnstock()
-        stock = Vnstock().stock(symbol=ticker, source="VCI")
-        fin = stock.finance
+        Finance = get_finance()
+        fin = Finance(symbol=ticker, source="VCI")
         n = 5
 
         data = {}
@@ -581,7 +580,10 @@ def scan_one_ticker(ticker: str) -> dict:
                 data["ts"]   = gvb("Total Assets", "TOTAL ASSETS", "TỔNG CỘNG TÀI SẢN", "TỔNG TÀI SẢN", "Tổng cộng tài sản")
                 data["nnh"]  = gvb("Current liabilities", "Total current liabilities", "Nợ ngắn hạn")
                 data["ndh"]  = gvb("Long-term liabilities", "Long.term liabilities", "Nợ dài hạn")
-                data["vcsh"] = gvb("Owner's Equity", "Vốn chủ sở hữu", "Vốn và các quỹ", "Capital and reserves")
+                equity = gvb("Owner's Equity", "Vốn chủ sở hữu", "Vốn và các quỹ", "Capital and reserves")
+                minority = gvb("Minority interests", "Lợi ích cổ đông thiểu số", "Minority interest")
+                # VCSH đúng = Owner's Equity - Minority interests (theo spec)
+                data["vcsh"] = [max(0, e - m) if e > 0 else e for e, m in zip(equity, minority)]
         except Exception as e:
             log.warning(f"{ticker} balance: {e}")
 
@@ -859,7 +861,7 @@ async def fetch_ticker(
 ):
     ticker = ticker.upper().strip()
     period = "year" if yearly == "1" else "quarter"
-    Vnstock = get_vnstock()
+    Finance = get_finance()
 
     result = {
         "ticker": ticker, "ok": True, "errors": [],
@@ -867,8 +869,7 @@ async def fetch_ticker(
     }
 
     try:
-        stock = Vnstock().stock(symbol=ticker, source="VCI")
-        fin = stock.finance
+        fin = Finance(symbol=ticker, source="VCI")
 
         # Income
         try:
@@ -964,12 +965,10 @@ async def fetch_ticker(
                 result["data"]["nnh"]  = gvb("Current liabilities", "Total current liabilities", "Nợ ngắn hạn")
                 result["data"]["ndh"]  = gvb("Long-term liabilities", "Long.term liabilities", "Nợ dài hạn")
 
-            # VCSH — lấy trực tiếp để tính ROE chính xác
-            # vnstock3: "Owner's Equity" hoặc "Vốn chủ sở hữu"
-            result["data"]["vcsh"] = gvb(
-                "Owner's Equity", "Vốn chủ sở hữu",
-                "Vốn và các quỹ", "Capital and reserves"
-            )
+            # VCSH đúng = Owner's Equity - Minority interests (theo spec CONTEXT.md)
+            equity_arr  = gvb("Owner's Equity", "Vốn chủ sở hữu", "Vốn và các quỹ", "Capital and reserves")
+            minority_arr = gvb("Minority interests", "Lợi ích cổ đông thiểu số", "Minority interest")
+            result["data"]["vcsh"] = [max(0, e - m) if e > 0 else e for e, m in zip(equity_arr, minority_arr)]
 
             gssk_row = find_row(bal, "Book value", "Giá trị sổ sách")
             if gssk_row is not None:
@@ -1519,11 +1518,11 @@ def debug_ticker(ticker: str):
     ticker = ticker.upper()
     out = {"ticker": ticker}
     try:
-        Vnstock = get_vnstock()
-        stock = Vnstock().stock(symbol=ticker, source="VCI")
-        inc = stock.finance.income_statement(period="year")
+        Finance = get_finance()
+        fin = Finance(symbol=ticker, source="VCI")
+        inc = fin.income_statement(period="year")
         out["income_rows"] = inc[["item", "item_en"]].to_dict("records") if inc is not None and not inc.empty else []
-        bal = stock.finance.balance_sheet(period="year")
+        bal = fin.balance_sheet(period="year")
         out["balance_rows"] = bal[["item", "item_en"]].to_dict("records") if bal is not None and not bal.empty else []
     except Exception as e:
         out["error"] = str(e)
