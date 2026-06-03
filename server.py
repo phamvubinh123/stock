@@ -1316,21 +1316,40 @@ def get_technical(ticker: str, period: int = Query(90)):
             elif macd_val and macd_val < 0:
                 signals.append({"type":"bear","text":f"MACD={macd_val:.2f} âm — momentum giảm"})
 
-        # MA trend
+        rsi_prev_val = safe_float(prev.get("rsi"))
+
+        # MA alignment (không cần crossover — chỉ cần tương quan hiện tại)
         if all([price, ma20, ma50]):
             if price > ma20 > ma50:
-                signals.append({"type":"bull","text":"Giá > MA20 > MA50 — uptrend rõ ràng"})
+                signals.append({"type":"bull","text":f"Giá ({price:.1f}) > MA20 ({ma20:.1f}) > MA50 ({ma50:.1f}) — uptrend rõ ràng"})
             elif price < ma20 < ma50:
-                signals.append({"type":"bear","text":"Giá < MA20 < MA50 — downtrend rõ ràng"})
-            elif price > ma50 and price < ma20:
-                signals.append({"type":"neutral","text":"Giá dưới MA20 nhưng trên MA50 — cần theo dõi"})
+                signals.append({"type":"bear","text":f"Giá ({price:.1f}) < MA20 ({ma20:.1f}) < MA50 ({ma50:.1f}) — downtrend rõ ràng"})
+            elif ma20 < ma50:
+                signals.append({"type":"bear","text":f"MA20 ({ma20:.1f}) < MA50 ({ma50:.1f}) — xu hướng ngắn hạn yếu hơn dài hạn"})
+            elif ma20 > ma50 and price < ma20:
+                signals.append({"type":"neutral","text":f"Giá dưới MA20 ({ma20:.1f}) nhưng MA uptrend — điều chỉnh ngắn hạn"})
+
+        # Giá vs MA50
+        if all([price, ma50]):
+            diff_pct = (price - ma50) / ma50 * 100
+            if price > ma50:
+                signals.append({"type":"bull","text":f"Giá trên MA50 {diff_pct:+.1f}% — nền tảng trung hạn tích cực"})
+            else:
+                signals.append({"type":"bear","text":f"Giá dưới MA50 {diff_pct:+.1f}% — áp lực trung hạn"})
 
         # Golden cross / Death cross
         if all([ma20, ma50, ma20_prev, ma50_prev]):
             if ma20 > ma50 and ma20_prev <= ma50_prev:
-                signals.append({"type":"bull","text":"Golden Cross — MA20 vừa cắt lên MA50 (tín hiệu mua mạnh)"})
+                signals.append({"type":"bull","text":"🌟 Golden Cross — MA20 vừa cắt lên MA50 (tín hiệu mua mạnh)"})
             elif ma20 < ma50 and ma20_prev >= ma50_prev:
-                signals.append({"type":"bear","text":"Death Cross — MA20 vừa cắt xuống MA50 (tín hiệu bán mạnh)"})
+                signals.append({"type":"bear","text":"💀 Death Cross — MA20 vừa cắt xuống MA50 (tín hiệu bán mạnh)"})
+
+        # RSI direction
+        if rsi_val and rsi_prev_val:
+            if rsi_val > rsi_prev_val + 2:
+                signals.append({"type":"bull","text":f"RSI đang tăng ({rsi_prev_val:.1f}→{rsi_val:.1f}) — momentum đang cải thiện"})
+            elif rsi_val < rsi_prev_val - 2:
+                signals.append({"type":"bear","text":f"RSI đang giảm ({rsi_prev_val:.1f}→{rsi_val:.1f}) — momentum suy yếu"})
 
         # Bollinger Bands
         if all([price, bb_upper, bb_lower, bb_mid]):
@@ -1339,20 +1358,33 @@ def get_technical(ticker: str, period: int = Query(90)):
                 signals.append({"type":"bear","text":f"Giá chạm Bollinger Upper ({bb_upper:.1f}k) — có thể điều chỉnh"})
             elif price <= bb_lower:
                 signals.append({"type":"bull","text":f"Giá chạm Bollinger Lower ({bb_lower:.1f}k) — cơ hội mua"})
+            elif price > bb_mid:
+                signals.append({"type":"bull","text":f"Giá trên BB Mid ({bb_mid:.1f}k) — nửa trên dải Bollinger"})
+            else:
+                signals.append({"type":"bear","text":f"Giá dưới BB Mid ({bb_mid:.1f}k) — nửa dưới dải Bollinger"})
             if bb_width and bb_width < 0.04:
                 signals.append({"type":"neutral","text":"Bollinger Bands co hẹp — sắp có breakout mạnh"})
 
-        # Volume spike
+        # Volume
         if vol_cur and avg_vol and avg_vol > 0:
             ratio = vol_cur / avg_vol
             if ratio >= 2.0:
-                signals.append({"type":"bull","text":f"Volume đột biến {ratio:.1f}x trung bình 20 phiên — quan tâm"})
+                signals.append({"type":"neutral","text":f"Volume đột biến {ratio:.1f}x TB20 phiên — chú ý biến động"})
+            elif ratio >= 1.3:
+                signals.append({"type":"bull","text":f"Volume tăng {ratio:.1f}x TB — tín hiệu tham gia thị trường"})
             elif ratio <= 0.4:
-                signals.append({"type":"neutral","text":"Volume thấp — giao dịch thờ ơ, thận trọng"})
+                signals.append({"type":"neutral","text":f"Volume thấp ({ratio:.1f}x TB) — giao dịch thờ ơ"})
 
-        # Nếu không có tín hiệu
-        if not signals:
-            signals.append({"type":"neutral","text":"Chưa có tín hiệu rõ ràng — thị trường đang tích lũy"})
+        # Verdict tổng hợp
+        bull_count = sum(1 for s in signals if s["type"] == "bull")
+        bear_count = sum(1 for s in signals if s["type"] == "bear")
+        if bull_count > bear_count + 1:
+            verdict = {"type":"bull","text":f"NHẬN ĐỊNH: TÍCH CỰC — {bull_count} tín hiệu tăng vs {bear_count} giảm"}
+        elif bear_count > bull_count + 1:
+            verdict = {"type":"bear","text":f"NHẬN ĐỊNH: TIÊU CỰC — {bear_count} tín hiệu giảm vs {bull_count} tăng"}
+        else:
+            verdict = {"type":"neutral","text":f"NHẬN ĐỊNH: TRUNG LẬP — thị trường giằng co ({bull_count} tăng / {bear_count} giảm)"}
+        signals.insert(0, verdict)
 
         cols = ["time","open","high","low","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
         return ok({
