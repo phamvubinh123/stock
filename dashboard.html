@@ -447,6 +447,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       Phân tích kỹ thuật
     </button>
+    <button class="nav-item" data-page="portfolio" onclick="showPage('portfolio')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+      Danh Mục
+    </button>
     <button class="nav-item" data-page="alerts" onclick="showPage('alerts')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       Alerts <span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;font-size:.65rem;padding:1px 6px;margin-left:4px">0</span>
@@ -797,6 +801,60 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
         </div>
       </div>
 
+      <!-- PAGE: DANH MỤC -->
+      <div class="page" id="page-portfolio">
+
+        <!-- Summary header -->
+        <div class="card" id="portSummaryCard">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div class="card-title" style="margin:0">💼 Danh Mục</div>
+            <button class="btn" style="font-size:.75rem" onclick="loadPortfolio()">↻ Cập nhật giá</button>
+          </div>
+          <div class="stat-grid" id="portSummaryStats">
+            <div class="empty" style="grid-column:1/-1;font-size:.82rem">Chưa có vị thế nào</div>
+          </div>
+        </div>
+
+        <!-- Danh sách positions -->
+        <div class="card" id="portPositionsCard">
+          <div id="portPositions"></div>
+        </div>
+
+        <!-- Form thêm vị thế mới -->
+        <div class="card">
+          <div class="card-title">+ Thêm vị thế</div>
+          <div class="fetch-row" style="flex-wrap:wrap;gap:10px;align-items:flex-end">
+            <div class="fg" style="flex:0 0 90px">
+              <label>Mã CP</label>
+              <input type="text" id="portTicker" placeholder="FPT" maxlength="10" style="text-transform:uppercase">
+            </div>
+            <div class="fg" style="flex:0 0 100px">
+              <label>Số CP</label>
+              <input type="number" id="portShares" placeholder="1000" min="1">
+            </div>
+            <div class="fg" style="flex:0 0 110px">
+              <label>Giá vốn (k)</label>
+              <input type="number" id="portAvgPrice" placeholder="118.5" step="0.1">
+            </div>
+            <div class="fg" style="flex:0 0 110px">
+              <label>Mục tiêu (k)</label>
+              <input type="number" id="portTP" placeholder="140.0" step="0.1">
+            </div>
+            <div class="fg" style="flex:0 0 110px">
+              <label>Cắt lỗ (k)</label>
+              <input type="number" id="portSL" placeholder="110.0" step="0.1">
+            </div>
+            <div class="fg" style="flex:1;min-width:120px">
+              <label>Ghi chú</label>
+              <input type="text" id="portNote" placeholder="Mua theo breakout...">
+            </div>
+            <button class="btn btn-primary" onclick="addPosition()" style="align-self:flex-end">Thêm</button>
+          </div>
+          <div id="portAddMsg" style="font-size:.8rem;margin-top:6px;min-height:18px"></div>
+        </div>
+
+      </div>
+
       <!-- PAGE: ALERTS -->
       <div class="page" id="page-alerts">
         <div class="card">
@@ -933,6 +991,7 @@ function enterApp(username) {
   loadWatchlist();
   loadDailyPicks();
   loadTriggeredAlerts();
+  loadPortfolio();
 }
 
 // Check session khi load
@@ -963,7 +1022,8 @@ function showPage(id) {
   const sub = SUB_NAVS[id];
   if (sub) document.getElementById(sub).style.display = 'flex';
   if (id === 'calculator') { showCalcTab('avg', document.querySelector('#subNavCalc .sub-tab')); }
-  if (id === 'alerts') { loadAlerts(); loadTriggeredAlerts(); }
+  if (id === 'alerts')    { loadAlerts(); loadTriggeredAlerts(); }
+  if (id === 'portfolio') { loadPortfolio(); }
 }
 
 function quickSearch(val) {
@@ -1869,6 +1929,131 @@ async function dcaDelete(ticker) {
 }
 
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// DANH MỤC — Portfolio Module (Redesign V2)
+// ═══════════════════════════════════════════
+let portfolioData = [];
+
+async function loadPortfolio() {
+  try {
+    const r = await fetch('/api/portfolio/summary', { headers: {'X-Token': authToken} });
+    const d = await r.json();
+    portfolioData = d.positions || [];
+    renderPortfolioSummary(d);
+    renderPortfolioPositions(d.positions || []);
+  } catch(e) { console.error('Portfolio load error', e); }
+}
+
+function renderPortfolioSummary(d) {
+  const stats = document.getElementById('portSummaryStats');
+  if (!d.positions?.length) {
+    stats.innerHTML = '<div class="empty" style="grid-column:1/-1;font-size:.82rem">Chưa có vị thế nào — thêm bên dưới</div>';
+    return;
+  }
+  const pnl = d.total_pnl || 0;
+  const pnlPct = d.total_pnl_pct || 0;
+  const cls = pnl >= 0 ? 'cg' : 'cr';
+  const sign = pnl >= 0 ? '+' : '';
+  stats.innerHTML = [
+    {v: fmt(d.total_cost/1000,1)+'B', l:'Vốn'},
+    {v: fmt(d.total_value/1000,1)+'B', l:'Giá trị HT'},
+    {v: sign+fmt(pnl/1000,1)+'B', l:'Lãi/Lỗ', cls},
+    {v: sign+fmt(pnlPct,2)+'%', l:'% P&L', cls},
+  ].map(s=>`<div class="stat"><div class="stat-val ${s.cls||''}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+}
+
+function renderPortfolioPositions(positions) {
+  const el = document.getElementById('portPositions');
+  if (!positions.length) { el.innerHTML = ''; return; }
+  el.innerHTML = positions.map(p => {
+    const pnlClr = p.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const sign = p.pnl >= 0 ? '+' : '';
+    const warns = p.warnings || [];
+    const critWarn = warns.find(w => w.level === 'critical');
+    const rowBg = critWarn ? 'var(--red-bg)' : '';
+    const warningHtml = warns.map(w =>
+      `<div style="font-size:.72rem;margin-top:3px;color:${w.level==='critical'?'var(--red)':w.level==='info'?'var(--green)':'var(--yellow,#b45309)'}">
+        ${w.msg}</div>`
+    ).join('');
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);background:${rowBg};border-radius:${rowBg?'8px':'0'};padding:12px ${rowBg?'10px':'0'}">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <b style="font-size:.95rem">${p.ticker}</b>
+          <span style="font-size:.72rem;color:var(--muted)">${fmt(p.shares,0)} CP · vốn ${fmt(p.avg_price,1)}k</span>
+          ${p.weight ? `<span style="font-size:.7rem;background:var(--purple-light);color:var(--purple);padding:1px 6px;border-radius:8px">${fmt(p.weight,1)}%</span>` : ''}
+        </div>
+        <div style="font-size:.8rem;color:var(--muted);margin-top:2px">
+          Giá HT: <b style="color:var(--text)">${p.cur_price ? fmt(p.cur_price,1)+'k' : '—'}</b>
+          ${p.target_price ? ` · TP: <span style="color:var(--green)">${fmt(p.target_price,1)}k</span>` : ''}
+          ${p.stop_loss    ? ` · SL: <span style="color:var(--red)">${fmt(p.stop_loss,1)}k</span>` : ''}
+        </div>
+        ${p.note ? `<div style="font-size:.72rem;color:var(--muted);font-style:italic;margin-top:2px">${p.note}</div>` : ''}
+        ${warningHtml}
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-weight:700;color:${pnlClr};font-size:.92rem">${sign}${fmt(p.pnl/1000,2)}B</div>
+        <div style="font-size:.78rem;color:${pnlClr}">${sign}${fmt(p.pnl_pct,2)}%</div>
+        <div style="display:flex;gap:5px;margin-top:6px;justify-content:flex-end">
+          <button class="btn-row" onclick="editPosition('${p.id}')">✏️</button>
+          <button class="btn-row" onclick="openInBuffett('${p.ticker}')">📊</button>
+          <button class="btn-row" onclick="openInTechnical('${p.ticker}')">📈</button>
+          <button class="btn-row" style="color:var(--red)" onclick="deletePosition('${p.id}','${p.ticker}')">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addPosition() {
+  const ticker    = document.getElementById('portTicker').value.trim().toUpperCase();
+  const shares    = parseFloat(document.getElementById('portShares').value);
+  const avg_price = parseFloat(document.getElementById('portAvgPrice').value);
+  const tp        = document.getElementById('portTP').value;
+  const sl        = document.getElementById('portSL').value;
+  const note      = document.getElementById('portNote').value.trim();
+  const msg       = document.getElementById('portAddMsg');
+  if (!ticker || !shares || !avg_price) {
+    msg.style.color='var(--red)'; msg.textContent='Cần nhập Mã CP, Số CP và Giá vốn!'; return;
+  }
+  try {
+    const r = await fetch('/api/portfolio', {
+      method:'POST', headers:{'Content-Type':'application/json','X-Token':authToken},
+      body: JSON.stringify({ ticker, shares, avg_price,
+        target_price: tp ? parseFloat(tp) : null,
+        stop_loss:    sl ? parseFloat(sl) : null, note })
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Lỗi');
+    msg.style.color='var(--green)'; msg.textContent=`✓ Đã thêm ${ticker}`;
+    ['portTicker','portShares','portAvgPrice','portTP','portSL','portNote'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    setTimeout(()=>msg.textContent='', 3000);
+    loadPortfolio();
+  } catch(e) { msg.style.color='var(--red)'; msg.textContent=e.message; }
+}
+
+async function deletePosition(id, ticker) {
+  if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
+  await fetch(`/api/portfolio/${id}`, { method:'DELETE', headers:{'X-Token':authToken} });
+  loadPortfolio();
+}
+
+function editPosition(id) {
+  const pos = portfolioData.find(p => p.id === id);
+  if (!pos) return;
+  const tp  = prompt('Mục tiêu giá (k):', pos.target_price || '');
+  const sl  = prompt('Cắt lỗ (k):', pos.stop_loss || '');
+  const note = prompt('Ghi chú:', pos.note || '');
+  fetch(`/api/portfolio/${id}`, {
+    method:'PUT', headers:{'Content-Type':'application/json','X-Token':authToken},
+    body: JSON.stringify({
+      target_price: tp  ? parseFloat(tp)  : null,
+      stop_loss:    sl  ? parseFloat(sl)  : null,
+      note: note || ''
+    })
+  }).then(()=>loadPortfolio());
+}
+
 // ALERTS — Phase 3
 // ═══════════════════════════════════════════
 const ALERT_TYPE_LABELS = {

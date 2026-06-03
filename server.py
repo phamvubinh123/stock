@@ -103,6 +103,19 @@ def init_db():
         data       JSONB,
         created_at TIMESTAMP DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS portfolio (
+        id           VARCHAR(50) PRIMARY KEY,
+        username     VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        ticker       VARCHAR(10) NOT NULL,
+        shares       FLOAT NOT NULL,
+        avg_price    FLOAT NOT NULL,
+        bought_at    DATE,
+        note         TEXT DEFAULT '',
+        target_price FLOAT,
+        stop_loss    FLOAT,
+        created_at   TIMESTAMP DEFAULT NOW(),
+        updated_at   TIMESTAMP DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS alerts (
         id           VARCHAR(50) PRIMARY KEY,
         username     VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
@@ -1459,7 +1472,7 @@ def get_technical(ticker: str, period: int = Query(90)):
         signals.insert(0, verdict)
 
         cols = ["time","open","high","low","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
-        return ok({
+        payload = {
             "ticker": ticker, "period": period,
             "latest": {
                 "time": str(latest.get("time")), "close": price,
@@ -1473,6 +1486,7 @@ def get_technical(ticker: str, period: int = Query(90)):
         }
         cache_set(cache_key, payload)
         return ok(payload)
+
     except HTTPException:
         raise
     except Exception as e:
@@ -2122,6 +2136,146 @@ async def sector_compare(ticker: str):
 
 
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# ROUTES — PORTFOLIO MODULE (Redesign V2, Bước 1)
+# ─────────────────────────────────────────────
+
+def _port_row(row) -> dict:
+    return {
+        "id":           row["id"],
+        "ticker":       row["ticker"],
+        "shares":       row["shares"],
+        "avg_price":    row["avg_price"],
+        "bought_at":    str(row["bought_at"]) if row["bought_at"] else None,
+        "note":         row["note"] or "",
+        "target_price": row["target_price"],
+        "stop_loss":    row["stop_loss"],
+        "created_at":   row["created_at"].isoformat() if row["created_at"] else None,
+    }
+
+async def _enrich_position(pos: dict, loop) -> dict:
+    """Thêm giá hiện tại + P&L + cảnh báo vào 1 position."""
+    t = pos["ticker"]
+    cur = cache_get(f"price:{t}") or 0
+    if not cur:
+        try:
+            Quote = get_quote()
+            today  = str(datetime.date.today())
+            m_ago  = str(datetime.date.today() - datetime.timedelta(days=10))
+            df = await loop.run_in_executor(
+                None, lambda tk=t: Quote(symbol=tk, source="KBS").history(start=m_ago, end=today)
+            )
+            if df is not None and not df.empty:
+                cur = float(df["close"].iloc[-1])
+                cache_set(f"price:{t}", cur)
+        except Exception:
+            pass
+
+    cost  = pos["shares"] * pos["avg_price"]
+    value = pos["shares"] * cur if cur else 0
+    pnl   = value - cost
+    pnl_pct = (pnl / cost * 100) if cost else 0
+
+    # % danh mục tạm — sẽ tính lại ở summary
+    warnings = []
+    if cur:
+        if pos.get("stop_loss") and cur <= pos["stop_loss"]:
+            warnings.append({"level":"critical","msg":f"🔴 Thủng Stop Loss {pos['stop_loss']}k!"})
+        if pos.get("target_price") and cur >= pos["target_price"] * 0.97:
+            warnings.append({"level":"info","msg":f"🎯 Đạt ~97% mục tiêu {pos['target_price']}k — cân nhắc chốt"})
+        if pos.get("stop_loss") and cur <= pos["stop_loss"] * 1.03:
+            if not any(w["level"]=="critical" for w in warnings):
+                warnings.append({"level":"warning","msg":f"⚠️ Đang tiếp cận Stop Loss {pos['stop_loss']}k"})
+
+    return {**pos, "cur_price": round(cur, 2),
+            "cost": round(cost,1), "value": round(value,1),
+            "pnl": round(pnl,1), "pnl_pct": round(pnl_pct,2),
+            "warnings": warnings}
+
+@app.get("/api/portfolio")
+async def get_portfolio(request: Request):
+    u = get_username(request)
+    loop = asyncio.get_event_loop()
+    if USE_DB:
+        rows = db_exec("SELECT * FROM portfolio WHERE username=%s ORDER BY created_at DESC", (u,), fetch="all") or []
+        positions = [_port_row(r) for r in rows]
+    else:
+        positions = []
+    enriched = await asyncio.gather(*[_enrich_position(p, loop) for p in positions])
+    return ok({"positions": list(enriched)})
+
+@app.get("/api/portfolio/summary")
+async def get_portfolio_summary(request: Request):
+    u = get_username(request)
+    loop = asyncio.get_event_loop()
+    if USE_DB:
+        rows = db_exec("SELECT * FROM portfolio WHERE username=%s ORDER BY created_at DESC", (u,), fetch="all") or []
+        positions = [_port_row(r) for r in rows]
+    else:
+        positions = []
+    if not positions:
+        return ok({"positions":[], "total_cost":0, "total_value":0, "total_pnl":0, "total_pnl_pct":0})
+    enriched = list(await asyncio.gather(*[_enrich_position(p, loop) for p in positions]))
+    total_cost  = sum(p["cost"]  for p in enriched)
+    total_value = sum(p["value"] for p in enriched)
+    total_pnl   = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
+    # Tính % danh mục
+    for p in enriched:
+        p["weight"] = round(p["value"] / total_value * 100, 1) if total_value else 0
+    enriched.sort(key=lambda x: abs(x["value"]), reverse=True)
+    return ok({
+        "positions":     enriched,
+        "total_cost":    round(total_cost,1),
+        "total_value":   round(total_value,1),
+        "total_pnl":     round(total_pnl,1),
+        "total_pnl_pct": round(total_pnl_pct,2),
+    })
+
+@app.post("/api/portfolio")
+async def add_position(request: Request, body: dict = Body(...)):
+    u = get_username(request)
+    pid = str(int(datetime.datetime.now().timestamp() * 1000))
+    ticker = body.get("ticker","").upper().strip()
+    shares = float(body.get("shares", 0))
+    avg_price = float(body.get("avg_price", 0))
+    if not ticker or shares <= 0 or avg_price <= 0:
+        raise HTTPException(400, "Thiếu ticker / shares / avg_price")
+    bought_at    = body.get("bought_at") or str(datetime.date.today())
+    note         = body.get("note","")
+    target_price = float(body.get("target_price")) if body.get("target_price") else None
+    stop_loss    = float(body.get("stop_loss"))    if body.get("stop_loss")    else None
+    if USE_DB:
+        db_exec(
+            "INSERT INTO portfolio (id,username,ticker,shares,avg_price,bought_at,note,target_price,stop_loss) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (pid, u, ticker, shares, avg_price, bought_at, note, target_price, stop_loss)
+        )
+    return ok({"id": pid, "ticker": ticker})
+
+@app.put("/api/portfolio/{pid}")
+async def update_position(pid: str, request: Request, body: dict = Body(...)):
+    u = get_username(request)
+    if USE_DB:
+        fields, vals = [], []
+        for col in ["shares","avg_price","note","target_price","stop_loss","bought_at"]:
+            if col in body:
+                fields.append(f"{col}=%s")
+                vals.append(body[col])
+        if fields:
+            fields.append("updated_at=NOW()")
+            vals += [pid, u]
+            db_exec(f"UPDATE portfolio SET {','.join(fields)} WHERE id=%s AND username=%s", vals)
+    return ok({"updated": pid})
+
+@app.delete("/api/portfolio/{pid}")
+def delete_position(pid: str, request: Request):
+    u = get_username(request)
+    if USE_DB:
+        db_exec("DELETE FROM portfolio WHERE id=%s AND username=%s", (pid, u))
+    return ok({"deleted": pid})
+
+
 # ROUTES — AI ALERT SYSTEM (Phase 3)
 # ─────────────────────────────────────────────
 
