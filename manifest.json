@@ -1,0 +1,14 @@
+{
+  "name": "Stock Agent AI",
+  "short_name": "StockAI",
+  "description": "Bộ công cụ phân tích cổ phiếu Warren Buffett",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F0F1F5",
+  "theme_color": "#4A3F8F",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

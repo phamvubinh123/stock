@@ -775,10 +775,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # ─────────────────────────────────────────────
 # ROUTES — CORE
 # ─────────────────────────────────────────────
+
+@app.get("/manifest.json")
+async def manifest():
+    return FileResponse("manifest.json", media_type="application/manifest+json")
+
+@app.get("/sw.js")
+async def sw():
+    return FileResponse("static/sw.js", media_type="application/javascript")
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -2384,7 +2395,7 @@ async def get_radar(request: Request):
     if not watchlist:
         return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     sem  = asyncio.Semaphore(3)
 
     async def _process(ticker: str):

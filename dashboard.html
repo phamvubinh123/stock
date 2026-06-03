@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock Agent — iBoard Style</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4A3F8F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="StockAI">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
@@ -365,9 +376,13 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .hist-result .l { font-size: .62rem; color: var(--text3); }
 .hist-actions { display: flex; gap: 4px; margin-top: 4px; justify-content: flex-end; }
 
+#mobileNav { display: none; }
+
 @media(max-width: 900px) {
   .app { grid-template-columns: 1fr; }
   .bottom-nav { display: none; }
+  #mobileNav { display: flex; }
+  .app-body { padding-bottom: 64px; }
 }
 /* ── DCA ── */
 .dca-row { border-bottom: 1px solid var(--border); }
@@ -383,6 +398,43 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .dca-child-actions { display:flex; gap:6px; margin-left:8px; }
 .dca-form-input { width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:.82rem; }
 #maCP::placeholder { text-transform: none; }
+
+@media (max-width: 768px) {
+  .app { flex-direction: column; }
+  .app-right { min-height: calc(100vh - 56px); }
+  .app-header { padding: 0 12px; gap: 8px; }
+  .header-user { display: none; }
+  .card { margin: 8px; padding: 12px; }
+  .summary-card { margin: 8px; padding: 12px; }
+  .data-table { margin: 8px; }
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .table-head { display: none; }
+  .table-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 4px 8px;
+    border: 1px solid var(--border);
+  }
+  .fetch-row { flex-direction: column; }
+  .fetch-row .fg { flex: unset; width: 100%; }
+  input, select { font-size: 16px !important; width: 100%; }
+  .calc-grid { grid-template-columns: 1fr !important; }
+  .calc-input-group { grid-template-columns: 1fr !important; }
+  .calc-metrics { grid-template-columns: repeat(2, 1fr); }
+  .dao-compare { grid-template-columns: 1fr !important; }
+  .big-score { font-size: 2.4rem; width: 56px; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .dcf-box { flex-direction: column; gap: 8px; }
+  .sub-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .sub-tab { white-space: nowrap; }
+  .sticky-actions { padding: 8px; }
+  .btn-buy { padding: 14px; font-size: 1rem; }
+  .hist-item { flex-wrap: wrap; gap: 8px; }
+  .login-card { margin: 16px; padding: 28px 20px; }
+  .app-body { padding-bottom: 64px; }
+}
 </style>
 </head>
 <body>
@@ -485,9 +537,6 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
           onkeydown="if(event.key==='Enter')quickSearch(this.value)">
       </div>
       <div class="header-actions">
-        <button class="icon-btn" onclick="triggerScan()" title="Scan ngay">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        </button>
         <button class="icon-btn" title="Thông báo">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span class="badge" id="pickBadge">0</span>
@@ -495,8 +544,6 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
       </div>
     </header>
 
-    <div class="progress-bar" id="progBar"><div class="progress-fill"></div></div>
-    <div id="scanNotice" style="display:none;text-align:center;font-size:.8rem;color:var(--muted);padding:5px 0"></div>
 
     <!-- Sub-navs -->
     <nav class="sub-nav" id="subNavDaily"></nav>
@@ -522,8 +569,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
               </div>
             </div>
             <div style="display:flex;gap:8px">
-              <button class="btn" id="btnRadar" onclick="triggerRadar()" title="Radar — điểm tổng hợp cơ bản + kỹ thuật">🔍 Radar</button>
-              <button class="btn btn-primary" id="btnScan" onclick="triggerScan()">Scan ngay</button>
+              <button class="btn btn-primary" id="btnRadar" onclick="triggerRadar()" title="Radar — điểm tổng hợp cơ bản + kỹ thuật">🔍 Radar</button>
             </div>
           </div>
           <div class="summary-grid">
@@ -537,7 +583,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
         <span id="sumChange" style="display:none"></span>
         <span id="wlCount" style="display:none"></span>
         <div id="aiCommentary" class="ai-box" style="display:none"></div>
-        <div id="picksContainer"><div class="empty">Nhấn <strong>Scan ngay</strong> để phân tích watchlist</div></div>
+        <div id="picksContainer"><div class="empty">Nhấn <strong>🔍 Radar</strong> để phân tích watchlist</div></div>
         <div id="radarContainer" style="display:none"></div>
       </div>
 
@@ -563,6 +609,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
               <span id="btnTxt">Kéo dữ liệu</span>
             </button>
           </div>
+          <div class="progress-bar" id="progBar"><div class="progress-fill"></div></div>
           <div id="fetchMsg" style="display:none;font-size:.8rem;color:var(--muted);padding:6px 2px;text-align:center"></div>
           <div class="log" id="logBox"></div>
         </div>
@@ -1100,6 +1147,11 @@ function showPage(id) {
   if (id === 'calculator') { showCalcTab('avg', document.querySelector('#subNavCalc .sub-tab')); }
   if (id === 'alerts')    { loadAlerts(); loadTriggeredAlerts(); }
   if (id === 'portfolio') { loadPortfolio(); }
+  document.querySelectorAll('#mobileNav button').forEach(b => {
+    const isActive = b.dataset.mob === id;
+    b.style.color = isActive ? 'var(--purple)' : 'var(--text3)';
+    b.style.borderTopColor = isActive ? 'var(--purple)' : 'transparent';
+  });
 }
 
 function quickSearch(val) {
@@ -1378,7 +1430,7 @@ async function loadDailyPicks() {
       updateSummary({});
       container.innerHTML = `<div class="data-table"><div class="table-head"><span>Mã trong Watchlist</span></div>` +
         watchlist.map(t => `<div class="table-row" onclick="openInBuffett('${t}')"><div><div class="sym">${t}</div></div></div>`).join('') + `</div>` +
-        `<div class="empty" style="color:var(--purple);font-weight:500;margin-top:8px">📊 Nhấn <strong>Scan ngay</strong> để cập nhật</div>`;
+        `<div class="empty" style="color:var(--purple);font-weight:500;margin-top:8px">📊 Nhấn <strong>🔍 Radar</strong> để cập nhật</div>`;
     }
   } catch(e) { container.innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`; }
 }
@@ -1422,56 +1474,6 @@ function renderPicks() {
   container.innerHTML = html + '</div>';
 }
 
-const SCAN_MSGS = [
-  'Đang kết nối vnstock...',
-  'Đang kéo báo cáo tài chính...',
-  'Đang tính điểm Buffett...',
-  'Đang phân tích tăng trưởng doanh thu...',
-  'Đang kiểm tra biên lợi nhuận...',
-  'Đang đánh giá chỉ số nợ...',
-  'Đang so sánh P/E và ROE...',
-  'Đang tổng hợp kết quả...',
-];
-
-async function triggerScan() {
-  const btn = document.getElementById('btnScan'), notice = document.getElementById('scanNotice');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang scan...'; }
-  document.getElementById('progBar').classList.add('show');
-  if (notice) { notice.style.display = 'block'; notice.textContent = SCAN_MSGS[0]; }
-  let smi = 0;
-  const scanTicker = setInterval(() => { smi=(smi+1)%SCAN_MSGS.length; if(notice) notice.textContent=SCAN_MSGS[smi]; }, 1200);
-  picksData = {top_picks:[],watchable:[],avoid:[]};
-  document.getElementById('picksContainer').innerHTML =
-    `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>P/E</span><span>Biên gộp</span><span>Giá</span></div><div id="streamRows"></div></div>`;
-  try {
-    await new Promise((resolve, reject) => {
-      const es = new EventSource('/api/scan-stream');
-      es.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        if (d.__done__) { picksData = d; renderPicks(); updateSummary(d); es.close(); resolve(); return; }
-        // Cập nhật message real-time theo mã đang scan
-        if (notice) notice.textContent = `Đang phân tích ${d.ticker}... (score: ${d.score||0}/14)`;
-        const clr = scoreColor(d.score||0), fillW = Math.round(((d.score||0)/14)*100), km = d.key_metrics||{};
-        const row = document.createElement('div');
-        row.className = `table-row ${scoreRowClass(d.score||0)}`;
-        row.innerHTML = `<div><div class="sym">${d.ticker}</div><div class="sub">${d.cagr_lntt!=null?'CAGR '+fmtPct(d.cagr_lntt):''}</div><div class="row-actions"><button class="btn-row" onclick="openInBuffett('${d.ticker}')">📊 Cơ bản</button><button class="btn-row" onclick="openInTechnical('${d.ticker}')">📈 KT</button></div></div>
-          <div class="cell"><div class="score-mini"><div class="score-track"><div class="score-fill" style="width:${fillW}%;background:${clr}"></div></div><span class="score-txt" style="color:${clr}">${d.score||0}/14</span></div></div>
-          <div class="cell">${km.roe!=null?fmtPct(km.roe):'—'}</div>
-          <div class="cell cell-sm">${km.pe>0?fmt(km.pe,1)+'x':'—'}</div>
-          <div class="cell">${km.gross_margin!=null?fmtPct(km.gross_margin):'—'}</div>
-          <div class="cell">${d.price>0?fmt(d.price,1):'—'}</div>`;
-        document.getElementById('streamRows')?.appendChild(row);
-      };
-      es.onerror = () => { es.close(); reject(new Error('Stream lỗi')); };
-    });
-  } catch(e) { console.error(e); }
-  finally {
-    clearInterval(scanTicker);
-    if (btn) { btn.disabled = false; btn.textContent = 'Scan ngay'; }
-    document.getElementById('progBar').classList.remove('show');
-    if (notice) notice.style.display = 'none';
-  }
-}
 
 function openInBuffett(ticker) {
   document.getElementById('maCP').value = ticker;
@@ -2588,5 +2590,56 @@ function fillCalcFromPortfolio(ticker, shares, avgPrice) {
 checkSession();
 dcaLoad();
 </script>
+
+<nav id="mobileNav" style="position:fixed;bottom:0;left:0;right:0;
+  height:56px;background:var(--surface);border-top:1px solid var(--border);
+  z-index:200;align-items:stretch;justify-content:space-around;
+  box-shadow:0 -2px 8px rgba(0,0,0,.06)">
+  <button onclick="showPage('daily')" data-mob="daily"
+    style="flex:1;border:none;background:transparent;font-family:var(--sans);
+    font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    border-top:2px solid transparent;transition:all .15s">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+    </svg>
+    Radar
+  </button>
+  <button onclick="showPage('buffett')" data-mob="buffett"
+    style="flex:1;border:none;background:transparent;font-family:var(--sans);
+    font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    border-top:2px solid transparent;transition:all .15s">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    Phân Tích
+  </button>
+  <button onclick="showPage('portfolio')" data-mob="portfolio"
+    style="flex:1;border:none;background:transparent;font-family:var(--sans);
+    font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    border-top:2px solid transparent;transition:all .15s">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="2" y="7" width="20" height="14" rx="2"/>
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+    </svg>
+    Danh Mục
+  </button>
+  <button onclick="showPage('calculator')" data-mob="calculator"
+    style="flex:1;border:none;background:transparent;font-family:var(--sans);
+    font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    border-top:2px solid transparent;transition:all .15s">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="4" y="2" width="16" height="20" rx="2"/>
+      <line x1="8" y1="6" x2="16" y2="6"/>
+      <line x1="8" y1="10" x2="10" y2="10"/>
+      <line x1="14" y1="10" x2="16" y2="10"/>
+    </svg>
+    Công Cụ
+  </button>
+</nav>
 </body>
 </html>
