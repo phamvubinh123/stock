@@ -398,6 +398,20 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .dca-child-actions { display:flex; gap:6px; margin-left:8px; }
 .dca-form-input { width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:.82rem; }
 #maCP::placeholder { text-transform: none; }
+.search-add-wrap { position:relative; margin-bottom:14px; }
+.search-add-wrap input { width:100%; padding:12px 16px; border:1.5px solid var(--border); border-radius:10px; font-size:.9rem; background:#fff; outline:none; transition:border-color .15s; box-sizing:border-box; }
+.search-add-wrap input:focus { border-color:var(--purple); }
+.autocomplete-dropdown { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.1); z-index:100; display:none; max-height:240px; overflow-y:auto; }
+.autocomplete-item { padding:10px 14px; cursor:pointer; font-size:.85rem; display:flex; gap:10px; align-items:center; }
+.autocomplete-item:hover { background:var(--purple-light); }
+.autocomplete-item .sym { font-weight:700; color:var(--purple); width:48px; flex-shrink:0; }
+.autocomplete-item .name { color:var(--text2); }
+.page-sub-nav { display:flex; gap:4px; padding:10px 14px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+.page-sub-tab { padding:8px 16px; font-size:.82rem; font-weight:500; color:var(--text2); border:none; background:transparent; cursor:pointer; border-bottom:2px solid transparent; font-family:var(--sans); transition:all .15s; }
+.page-sub-tab.active { color:var(--purple); border-bottom-color:var(--purple); font-weight:600; }
+.page-sub-tab:hover { color:var(--purple); }
+.page-section { display:none; }
+.page-section.active { display:block; }
 
 @media (max-width: 768px) {
   .app { flex-direction: column; }
@@ -491,38 +505,22 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   <nav class="bottom-nav" id="sidebarNav">
     <div class="sidebar-logo">📈 Stock Agent <span>AI</span></div>
 
-    <!-- 4 MODULE CHÍNH -->
-    <button class="nav-item active" data-page="daily" onclick="showPage('daily')">
+    <button class="nav-item active" data-group="khampha" onclick="showGroup('khampha')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      🔍 Scan
+      🔍 Khám Phá
     </button>
-    <button class="nav-item" data-page="buffett" onclick="showPage('buffett')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-      🔬 Phân Tích
-    </button>
-    <button class="nav-item" data-page="portfolio" onclick="showPage('portfolio')">
+    <button class="nav-item" data-group="danhmuc" onclick="showGroup('danhmuc')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
       💼 Danh Mục
     </button>
-    <button class="nav-item" data-page="calculator" onclick="showPage('calculator')">
+    <button class="nav-item" data-group="congthu" onclick="showGroup('congthu')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
       🧮 Công Cụ
     </button>
 
-    <div class="nav-sep"></div>
-
-    <!-- PHỤ: Alerts + Kỹ thuật (ít dùng hơn) -->
-    <button class="nav-item" data-page="alerts" onclick="showPage('alerts')" style="font-size:.78rem;opacity:.85">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Alerts <span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;font-size:.6rem;padding:1px 5px;margin-left:3px">0</span>
-    </button>
-    <button class="nav-item" data-page="technical" onclick="showPage('technical')" style="font-size:.78rem;opacity:.85">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      Chart KT
-    </button>
-
     <div class="sidebar-footer">
       <div id="sidebarUser" style="font-weight:600;color:var(--purple);margin-bottom:4px"></div>
+      <span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;font-size:.6rem;padding:1px 5px;margin-bottom:4px">0 alert</span>
       <div style="cursor:pointer;color:var(--red);font-size:.78rem" onclick="doLogout()">⎋ Đăng xuất</div>
     </div>
   </nav>
@@ -531,13 +529,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   <div class="app-right">
     <header class="app-header">
       <div class="avatar" id="avatarEl" title="Tài khoản">SA</div>
-      <div class="search-wrap" onclick="document.getElementById('globalSearch').focus()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="globalSearch" placeholder="Nhập mã để phân tích nhanh (VD: FPT, VNM ...)"
-          onkeydown="if(event.key==='Enter')quickSearch(this.value)">
-      </div>
+      <div style="flex:1"></div>
       <div class="header-actions">
-        <button class="icon-btn" title="Thông báo">
+        <button class="icon-btn" title="Thông báo" onclick="showGroup('danhmuc');showPage('alerts')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span class="badge" id="pickBadge">0</span>
         </button>
@@ -546,7 +540,21 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 
 
     <!-- Sub-navs -->
-    <nav class="sub-nav" id="subNavDaily"></nav>
+    <nav class="page-sub-nav" id="subNavKhamPha">
+      <button class="page-sub-tab active" data-sub="daily" onclick="showSubPage('khampha','daily',this)">🔍 Scan</button>
+      <button class="page-sub-tab" data-sub="buffett" onclick="showSubPage('khampha','buffett',this)">🔬 Phân Tích</button>
+      <button class="page-sub-tab" data-sub="technical" onclick="showSubPage('khampha','technical',this)">📈 Chart KT</button>
+    </nav>
+    <nav class="page-sub-nav" id="subNavDanhMuc" style="display:none">
+      <button class="page-sub-tab active" data-sub="portfolio" onclick="showSubPage('danhmuc','portfolio',this)">💼 Danh Mục</button>
+      <button class="page-sub-tab" data-sub="alerts" onclick="showSubPage('danhmuc','alerts',this)">🔔 Alerts <span id="alertBadge2" style="display:none;background:var(--red);color:#fff;border-radius:8px;font-size:.6rem;padding:1px 5px;margin-left:2px">0</span></button>
+    </nav>
+    <nav class="sub-nav" id="subNavCalc" style="display:none">
+      <div class="sub-tab active" onclick="showCalcTab('avg',this)">Trung Bình Giá</div>
+      <div class="sub-tab" onclick="showCalcTab('dao',this)">Đảo Hàng</div>
+      <div class="sub-tab" onclick="showCalcTab('history',this)">Lịch Sử</div>
+    </nav>
+    <nav class="sub-nav" id="subNavDaily" style="display:none"></nav>
     <nav class="sub-nav" id="subNavBuffett" style="display:none"></nav>
     <nav class="sub-nav" id="subNavCalc" style="display:none">
       <div class="sub-tab active" onclick="showCalcTab('avg',this)">Trung Bình Giá</div>
@@ -563,20 +571,24 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
           <div class="summary-top">
             <div class="wl-wrap" style="flex:1;margin-right:12px">
               <div class="wl-tags" id="wlTags"></div>
-              <div class="wl-add">
-                <input type="text" id="wlInput" placeholder="Thêm mã" maxlength="10" onkeydown="if(event.key==='Enter')addToWl()">
-                <button class="btn btn-primary" onclick="addToWl()">+</button>
-              </div>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-primary" id="btnRadar" onclick="triggerRadar()" title="Radar — điểm tổng hợp cơ bản + kỹ thuật">🔍 Scan</button>
             </div>
           </div>
-          <div class="summary-grid">
-            <div class="summary-item"><div class="lbl">Đạt chuẩn</div><div class="val" id="sumTop">0</div></div>
-            <div class="summary-item"><div class="lbl">Theo dõi</div><div class="val" id="sumWatch">0</div></div>
-            <div class="summary-item"><div class="lbl">Tránh</div><div class="val" id="sumAvoid">0</div></div>
-            <div class="summary-item"><div class="lbl">Lần scan</div><div class="val" id="sumTime" style="font-size:.72rem">—</div></div>
+          <div class="search-add-wrap">
+            <input type="text" id="radarSearch"
+              placeholder="🔍 Tìm mã hoặc tên công ty... (VD: FPT, Vinamilk)"
+              autocomplete="off"
+              oninput="showAutocomplete(this.value)"
+              onkeydown="if(event.key==='Enter')addAndScan(this.value)">
+            <div id="autocompleteList" class="autocomplete-dropdown"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <div class="summary-grid" style="flex:1;margin-bottom:0">
+              <div class="summary-item"><div class="lbl">Đạt chuẩn</div><div class="val" id="sumTop">0</div></div>
+              <div class="summary-item"><div class="lbl">Theo dõi</div><div class="val" id="sumWatch">0</div></div>
+              <div class="summary-item"><div class="lbl">Tránh</div><div class="val" id="sumAvoid">0</div></div>
+              <div class="summary-item"><div class="lbl">Lần scan</div><div class="val" id="sumTime" style="font-size:.72rem">—</div></div>
+            </div>
+            <button class="btn btn-primary" id="btnRadar" onclick="triggerRadar()" style="flex-shrink:0;white-space:nowrap">🔍 Scan</button>
           </div>
         </div>
         <span id="sumScore" style="display:none"></span>
@@ -1134,21 +1146,66 @@ async function checkSession() {
 // ═══════════════════════════════════════════
 // NAV
 // ═══════════════════════════════════════════
-const SUB_NAVS = { daily: 'subNavDaily', buffett: 'subNavBuffett', calculator: 'subNavCalc', technical: null };
+// group → pages trong group đó
+const GROUP_PAGES = {
+  khampha: ['daily','buffett','technical'],
+  danhmuc: ['portfolio','alerts'],
+  congthu: ['calculator'],
+};
+const PAGE_GROUP = {};
+Object.entries(GROUP_PAGES).forEach(([g,pages]) => pages.forEach(p => PAGE_GROUP[p] = g));
+
+const GROUP_DEFAULT = { khampha:'daily', danhmuc:'portfolio', congthu:'calculator' };
+const GROUP_SUBNAV  = { khampha:'subNavKhamPha', danhmuc:'subNavDanhMuc', congthu:'subNavCalc' };
+
+function showGroup(group) {
+  showPage(GROUP_DEFAULT[group]);
+}
+
+function showSubPage(group, pageId, tabEl) {
+  showPage(pageId);
+  // highlight sub-tab
+  const navId = GROUP_SUBNAV[group];
+  if (navId) document.querySelectorAll(`#${navId} .page-sub-tab`).forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+}
 
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + id)?.classList.add('active');
-  document.querySelector(`.bottom-nav [data-page="${id}"]`)?.classList.add('active');
-  Object.values(SUB_NAVS).forEach(sid => { if (sid) document.getElementById(sid).style.display = 'none'; });
-  const sub = SUB_NAVS[id];
-  if (sub) document.getElementById(sub).style.display = 'flex';
+
+  // Sidebar: highlight group
+  const group = PAGE_GROUP[id] || id;
+  document.querySelectorAll('.bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`.bottom-nav [data-group="${group}"]`)?.classList.add('active');
+
+  // Sub-navs: ẩn hết, chỉ show sub-nav của group
+  ['subNavKhamPha','subNavDanhMuc','subNavCalc','subNavDaily','subNavBuffett'].forEach(s => {
+    const el = document.getElementById(s); if (el) el.style.display = 'none';
+  });
+  const subId = GROUP_SUBNAV[group];
+  if (subId) {
+    const sub = document.getElementById(subId);
+    if (sub) sub.style.display = subId === 'subNavCalc' ? 'flex' : 'flex';
+  }
+
+  // Highlight đúng sub-tab trong group nav
+  const navId = GROUP_SUBNAV[group];
+  if (navId) {
+    document.querySelectorAll(`#${navId} .page-sub-tab`).forEach(t => {
+      t.classList.toggle('active', t.dataset.sub === id);
+    });
+  }
+
+  // Callbacks
   if (id === 'calculator') { showCalcTab('avg', document.querySelector('#subNavCalc .sub-tab')); }
-  if (id === 'alerts')    { loadAlerts(); loadTriggeredAlerts(); }
-  if (id === 'portfolio') { loadPortfolio(); }
+  if (id === 'alerts')     { loadAlerts(); loadTriggeredAlerts(); }
+  if (id === 'portfolio')  { loadPortfolio(); }
+
+  // Mobile nav
+  const MOB_GROUP = { khampha:'daily', danhmuc:'portfolio', congthu:'calculator' };
   document.querySelectorAll('#mobileNav button').forEach(b => {
-    const isActive = b.dataset.mob === id;
+    const isActive = b.dataset.mob === (MOB_GROUP[group] || id);
     b.style.color = isActive ? 'var(--purple)' : 'var(--text3)';
     b.style.borderTopColor = isActive ? 'var(--purple)' : 'transparent';
   });
@@ -1160,6 +1217,15 @@ function quickSearch(val) {
   document.getElementById('maCP').value = t;
   showPage('buffett');
   fetchData();
+}
+
+function loadWatchlistTags() {
+  fetch('/api/watchlist').then(r=>r.json()).then(d=>{
+    const tags = document.getElementById('wlTags');
+    if (!tags) return;
+    const wl = d.watchlist || [];
+    tags.innerHTML = wl.map(t=>`<span class="wl-tag" onclick="openInBuffett('${t}')">${t}<button onclick="event.stopPropagation();removeFromWl('${t}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:0 0 0 4px;font-size:.7rem">×</button></span>`).join('');
+  }).catch(()=>{});
 }
 
 // ═══════════════════════════════════════════
@@ -2585,6 +2651,82 @@ function fillCalcFromPortfolio(ticker, shares, avgPrice) {
 }
 
 // ═══════════════════════════════════════════
+// AUTOCOMPLETE + ADD & SCAN
+// ═══════════════════════════════════════════
+const VN100_LIST = [
+  {sym:"ACB",name:"Ngân hàng ACB"},{sym:"BCM",name:"Becamex IDC"},
+  {sym:"BID",name:"Ngân hàng BIDV"},{sym:"BVH",name:"Tập đoàn Bảo Việt"},
+  {sym:"CTG",name:"Ngân hàng VietinBank"},{sym:"FPT",name:"Tập đoàn FPT"},
+  {sym:"GAS",name:"PV GAS"},{sym:"GVR",name:"Tập đoàn Công nghiệp Cao su"},
+  {sym:"HDB",name:"Ngân hàng HDBank"},{sym:"HPG",name:"Tập đoàn Hòa Phát"},
+  {sym:"MBB",name:"Ngân hàng MBBank"},{sym:"MSN",name:"Tập đoàn Masan"},
+  {sym:"MWG",name:"Thế Giới Di Động"},{sym:"NVL",name:"Novaland"},
+  {sym:"PDR",name:"Phát Đạt"},{sym:"PLX",name:"Petrolimex"},
+  {sym:"POW",name:"PV Power"},{sym:"SAB",name:"Sabeco"},
+  {sym:"SHB",name:"Ngân hàng SHB"},{sym:"SSB",name:"Ngân hàng SeABank"},
+  {sym:"SSI",name:"Chứng khoán SSI"},{sym:"STB",name:"Ngân hàng Sacombank"},
+  {sym:"TCB",name:"Ngân hàng Techcombank"},{sym:"TPB",name:"Ngân hàng TPBank"},
+  {sym:"VCB",name:"Ngân hàng Vietcombank"},{sym:"VHM",name:"Vinhomes"},
+  {sym:"VIB",name:"Ngân hàng VIB"},{sym:"VIC",name:"Tập đoàn Vingroup"},
+  {sym:"VJC",name:"Vietjet Air"},{sym:"VNM",name:"Vinamilk"},
+  {sym:"VPB",name:"Ngân hàng VPBank"},{sym:"VRE",name:"Vincom Retail"},
+  {sym:"VSH",name:"Thủy điện Vĩnh Sơn"},{sym:"VTO",name:"Vận tải Xăng dầu Vitaco"},
+  {sym:"DGC",name:"Hóa chất Đức Giang"},{sym:"DXG",name:"Đất Xanh Group"},
+  {sym:"EIB",name:"Ngân hàng Eximbank"},{sym:"EVF",name:"Tài chính Điện lực"},
+  {sym:"GEX",name:"Tập đoàn Gelex"},{sym:"GMD",name:"Gemadept"},
+  {sym:"HAG",name:"Hoàng Anh Gia Lai"},{sym:"HCM",name:"Chứng khoán HCM"},
+  {sym:"HDG",name:"Tập đoàn Hà Đô"},{sym:"HSG",name:"Hoa Sen Group"},
+  {sym:"IDC",name:"Kinh doanh và Phát triển Bình Dương"},{sym:"IMP",name:"Imexpharm"},
+  {sym:"KBC",name:"Khu công nghiệp Kinh Bắc"},{sym:"KDH",name:"Khang Điền"},
+  {sym:"LPB",name:"Ngân hàng LienVietPostBank"},{sym:"NAB",name:"Ngân hàng Nam Á"},
+  {sym:"OCB",name:"Ngân hàng OCB"},{sym:"PNJ",name:"Vàng bạc Đá quý Phú Nhuận"},
+  {sym:"PVD",name:"PV Drilling"},{sym:"PVT",name:"Vận tải Dầu khí"},
+  {sym:"REE",name:"Cơ điện lạnh REE"},{sym:"SBT",name:"Đường TTC Biên Hòa"},
+  {sym:"VCI",name:"Chứng khoán Vietcap"},{sym:"VGC",name:"Viglacera"},
+  {sym:"VGI",name:"Viettel Global"},{sym:"VHC",name:"Vĩnh Hoàn"},
+  {sym:"VND",name:"Chứng khoán VNDirect"},{sym:"VPI",name:"Văn Phú Invest"},
+  {sym:"BMP",name:"Nhựa Bình Minh"},{sym:"DHC",name:"Đông Hải Bến Tre"},
+  {sym:"VCS",name:"Vicostone"},{sym:"PPC",name:"Nhiệt điện Phả Lại"},
+  {sym:"TCH",name:"Hoàng Huy"},{sym:"NLG",name:"Nam Long"},
+];
+
+function showAutocomplete(val) {
+  const q = val.trim().toUpperCase();
+  const dropdown = document.getElementById('autocompleteList');
+  if (!q) { dropdown.style.display = 'none'; return; }
+  const matches = VN100_LIST.filter(s =>
+    s.sym.startsWith(q) || s.sym.includes(q) || s.name.toUpperCase().includes(q)
+  ).slice(0, 8);
+  if (!matches.length) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = matches.map(s =>
+    `<div class="autocomplete-item" onclick="addAndScan('${s.sym}')">
+      <span class="sym">${s.sym}</span><span class="name">${s.name}</span>
+    </div>`
+  ).join('');
+  dropdown.style.display = 'block';
+}
+
+async function addAndScan(ticker) {
+  const t = (ticker || document.getElementById('radarSearch')?.value || '').trim().toUpperCase();
+  if (!t) return;
+  const inp = document.getElementById('radarSearch');
+  if (inp) inp.value = '';
+  document.getElementById('autocompleteList').style.display = 'none';
+  await fetch('/api/watchlist/add', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Token':authToken},
+    body:JSON.stringify({ticker:t})
+  });
+  loadWatchlistTags();
+  triggerRadar();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-add-wrap'))
+    document.getElementById('autocompleteList').style.display = 'none';
+});
+
+// ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
 checkSession();
@@ -2595,7 +2737,7 @@ dcaLoad();
   height:56px;background:var(--surface);border-top:1px solid var(--border);
   z-index:200;align-items:stretch;justify-content:space-around;
   box-shadow:0 -2px 8px rgba(0,0,0,.06)">
-  <button onclick="showPage('daily')" data-mob="daily"
+  <button onclick="showGroup('khampha')" data-mob="daily"
     style="flex:1;border:none;background:transparent;font-family:var(--sans);
     font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:2px;
@@ -2603,20 +2745,9 @@ dcaLoad();
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
     </svg>
-    Radar
+    Khám Phá
   </button>
-  <button onclick="showPage('buffett')" data-mob="buffett"
-    style="flex:1;border:none;background:transparent;font-family:var(--sans);
-    font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
-    flex-direction:column;align-items:center;justify-content:center;gap:2px;
-    border-top:2px solid transparent;transition:all .15s">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-    </svg>
-    Phân Tích
-  </button>
-  <button onclick="showPage('portfolio')" data-mob="portfolio"
+  <button onclick="showGroup('danhmuc')" data-mob="portfolio"
     style="flex:1;border:none;background:transparent;font-family:var(--sans);
     font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:2px;
@@ -2627,7 +2758,7 @@ dcaLoad();
     </svg>
     Danh Mục
   </button>
-  <button onclick="showPage('calculator')" data-mob="calculator"
+  <button onclick="showGroup('congthu')" data-mob="calculator"
     style="flex:1;border:none;background:transparent;font-family:var(--sans);
     font-size:.6rem;color:var(--text3);cursor:pointer;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:2px;

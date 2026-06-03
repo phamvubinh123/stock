@@ -146,6 +146,8 @@ USE_DB = bool(DATABASE_URL) and HAS_PSYCOPG2
 # WATCHLIST CONFIG — sửa thoải mái
 # ─────────────────────────────────────────────
 DEFAULT_WATCHLIST = ["FPT", "VCB"]
+VN30_TOP10 = ["VCB","BID","CTG","FPT","MWG","HPG","GAS","VIC","VHM","MSN"]
+VN30_RADAR_CACHE = "vn30_radar_cache.json"
 
 # File lưu watchlist & daily results (fallback khi không có DB)
 WATCHLIST_FILE  = "watchlist.json"
@@ -212,16 +214,17 @@ def load_watchlist(username: str = "default") -> List[str]:
             rows = db_exec("SELECT ticker FROM watchlists WHERE username=%s ORDER BY position", (username,), fetch="all")
             if rows is not None:
                 tickers = [r["ticker"] for r in rows]
-                return tickers if tickers else list(DEFAULT_WATCHLIST)
+                return tickers if tickers else list(VN30_TOP10)
         except Exception as e:
             log.warning(f"DB load_watchlist error: {e}")
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE) as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if data else list(VN30_TOP10)
         except:
             pass
-    return list(DEFAULT_WATCHLIST)
+    return list(VN30_TOP10)
 
 
 def save_watchlist(symbols: List[str], username: str = "default"):
@@ -741,11 +744,41 @@ async def run_daily_scan(watchlist: Optional[List[str]] = None, username: str = 
 # SCHEDULER
 # ─────────────────────────────────────────────
 @asynccontextmanager
+async def _build_vn30_cache():
+    """Scan VN30_TOP10, lưu vào cache file."""
+    log.info("🔄 Building VN30 radar cache...")
+    results = []
+    loop = asyncio.get_running_loop()
+    for ticker in VN30_TOP10:
+        try:
+            scan_r  = await loop.run_in_executor(None, scan_one_ticker, ticker)
+            ta_data = await loop.run_in_executor(None, compute_technical_sync, ticker)
+            signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+            results.append({
+                "ticker":        ticker,
+                "signal":        signal,
+                "buffett_score": scan_r.get("score", 0),
+                "price":         (ta_data.get("latest") or {}).get("close"),
+                "volume_warning":(ta_data.get("volume_signal") or {}).get("warning"),
+                "key_metrics":   scan_r.get("key_metrics", {}),
+            })
+            await asyncio.sleep(1)
+        except Exception as e:
+            log.warning(f"VN30 cache {ticker}: {e}")
+    results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
+    try:
+        with open(VN30_RADAR_CACHE, "w") as f:
+            json.dump({"updated_at": datetime.datetime.now().isoformat(), "results": results},
+                      f, ensure_ascii=False, cls=SafeEncoder)
+        log.info(f"✅ VN30 radar cache saved — {len(results)} tickers")
+    except Exception as e:
+        log.error(f"VN30 cache write error: {e}")
+
+
 async def lifespan(app: FastAPI):
     if USE_DB:
         try:
             init_db()
-            # Tạo user "default" cho watchlist/daily picks chung
             db_exec("INSERT INTO users (username, pin) VALUES ('default','0000') ON CONFLICT DO NOTHING")
         except Exception as e:
             log.warning(f"DB init warning: {e}")
@@ -754,12 +787,33 @@ async def lifespan(app: FastAPI):
     # Alert checker — chạy mỗi 15 phút
     async def _alert_loop():
         while True:
-            await asyncio.sleep(900)  # 15 phút
+            await asyncio.sleep(900)
             await _check_all_alerts()
 
-    alert_task = asyncio.create_task(_alert_loop())
+    # VN30 cache scheduler — chạy lúc 8:00 sáng VN mỗi ngày
+    async def _vn30_scheduler():
+        import pytz
+        tz = pytz.timezone("Asia/Ho_Chi_Minh")
+        # Nếu chưa có cache thì build ngay khi start
+        if not os.path.exists(VN30_RADAR_CACHE):
+            await asyncio.sleep(10)  # đợi server khởi động xong
+            await _build_vn30_cache()
+        while True:
+            now = datetime.datetime.now(tz)
+            # Tính giây đến 8:00 sáng hôm sau
+            next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += datetime.timedelta(days=1)
+            wait_sec = (next_run - now).total_seconds()
+            log.info(f"⏰ VN30 cache next run in {wait_sec/3600:.1f}h")
+            await asyncio.sleep(wait_sec)
+            await _build_vn30_cache()
+
+    alert_task   = asyncio.create_task(_alert_loop())
+    vn30_task    = asyncio.create_task(_vn30_scheduler())
     yield
     alert_task.cancel()
+    vn30_task.cancel()
     log.info("Stock Agent AI stopped")
 
 
@@ -2389,37 +2443,51 @@ def compute_technical_sync(ticker: str, period: int = 90) -> dict:
 
 @app.get("/api/radar")
 async def get_radar(request: Request):
-    """Trả về watchlist với điểm tổng hợp cơ bản + kỹ thuật."""
+    """Trả về watchlist với điểm tổng hợp. Ưu tiên cache VN30, fallback realtime cho mã khác."""
     try:
         u = get_username(request)
         watchlist = load_watchlist(u)
-        if not watchlist:
-            return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
+
+        # Load VN30 cache
+        vn30_cache = {}
+        updated_at = datetime.datetime.now().isoformat()
+        if os.path.exists(VN30_RADAR_CACHE):
+            try:
+                with open(VN30_RADAR_CACHE) as f:
+                    cache = json.load(f)
+                    updated_at = cache.get("updated_at", updated_at)
+                    for r in cache.get("results", []):
+                        vn30_cache[r["ticker"]] = r
+            except Exception as e:
+                log.warning(f"VN30 cache read error: {e}")
 
         loop = asyncio.get_running_loop()
         sem  = asyncio.Semaphore(3)
 
         async def _process(ticker: str):
+            # Dùng cache nếu có
+            if ticker in vn30_cache:
+                return vn30_cache[ticker]
             async with sem:
                 try:
                     scan_r  = await loop.run_in_executor(None, scan_one_ticker, ticker)
                     ta_data = await loop.run_in_executor(None, compute_technical_sync, ticker)
                     signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
                     return {
-                        "ticker":         ticker,
-                        "signal":         signal,
-                        "buffett_score":  scan_r.get("score", 0),
-                        "price":          (ta_data.get("latest") or {}).get("close"),
-                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                        "key_metrics":    scan_r.get("key_metrics", {}),
+                        "ticker":        ticker,
+                        "signal":        signal,
+                        "buffett_score": scan_r.get("score", 0),
+                        "price":         (ta_data.get("latest") or {}).get("close"),
+                        "volume_warning":(ta_data.get("volume_signal") or {}).get("warning"),
+                        "key_metrics":   scan_r.get("key_metrics", {}),
                     }
                 except Exception as e:
                     log.warning(f"Radar {ticker}: {e}")
-                    return {"ticker": ticker, "signal": {"combined":0,"action":"TRÁNH","color":"red","ichi_label":"—"}, "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
+                    return {"ticker": ticker, "signal": {"combined":0,"action":"TRÁNH","color":"red","ichi_label":"—","ta_score":0,"fundamental":0}, "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
 
         results = list(await asyncio.gather(*[_process(t) for t in watchlist]))
         results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
-        return ok({"results": results, "updated_at": datetime.datetime.now().isoformat()})
+        return ok({"results": results, "updated_at": updated_at, "from_cache": bool(vn30_cache)})
     except Exception as e:
         log.error(f"Radar endpoint error: {e}", exc_info=True)
         return ok({"results": [], "error": str(e), "updated_at": datetime.datetime.now().isoformat()})
