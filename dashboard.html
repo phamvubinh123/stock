@@ -512,7 +512,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
                 <button class="btn btn-primary" onclick="addToWl()">+</button>
               </div>
             </div>
-            <button class="btn btn-primary" id="btnScan" onclick="triggerScan()">Scan ngay</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn" id="btnRadar" onclick="triggerRadar()" title="Radar — điểm tổng hợp cơ bản + kỹ thuật">🔍 Radar</button>
+              <button class="btn btn-primary" id="btnScan" onclick="triggerScan()">Scan ngay</button>
+            </div>
           </div>
           <div class="summary-grid">
             <div class="summary-item"><div class="lbl">Đạt chuẩn</div><div class="val" id="sumTop">0</div></div>
@@ -526,6 +529,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
         <span id="wlCount" style="display:none"></span>
         <div id="aiCommentary" class="ai-box" style="display:none"></div>
         <div id="picksContainer"><div class="empty">Nhấn <strong>Scan ngay</strong> để phân tích watchlist</div></div>
+        <div id="radarContainer" style="display:none"></div>
       </div>
 
       <!-- ═══ BUFFETT ═══ -->
@@ -2229,6 +2233,84 @@ async function loadSectorCompare(ticker) {
       }).join('')}
       </tbody></table></div>`;
   } catch(e) { console.error('Sector compare error', e); }
+}
+
+// ═══════════════════════════════════════════
+// RADAR — Bước 3 (Combined Signal)
+// ═══════════════════════════════════════════
+const ACTION_CONFIG = {
+  XEM:   { bg: 'var(--green-bg)',  fg: 'var(--green)',  icon: '🟢' },
+  CHỜ:   { bg: '#fef3c7',          fg: '#92400e',        icon: '🟡' },
+  TRÁNH: { bg: 'var(--red-bg)',    fg: 'var(--red)',     icon: '🔴' },
+};
+
+async function triggerRadar() {
+  const btn = document.getElementById('btnRadar');
+  const container = document.getElementById('radarContainer');
+  const picks = document.getElementById('picksContainer');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang quét...';
+  container.style.display = 'none';
+  picks.style.display = 'none';
+  try {
+    const r = await fetch('/api/radar', { headers: {'X-Token': authToken} });
+    const d = await r.json();
+    const results = d.results || [];
+    if (!results.length) {
+      container.innerHTML = '<div class="empty">Watchlist trống — thêm mã trước</div>';
+      container.style.display = 'block'; return;
+    }
+    const updatedAt = d.updated_at ? d.updated_at.slice(0,16).replace('T',' ') : '';
+    let html = `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin:0">🔍 Radar <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updatedAt}</span></div>
+        <button class="btn" style="font-size:.72rem" onclick="triggerRadar()">↻ Quét lại</button>
+      </div>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.83rem">
+      <thead><tr style="color:var(--muted);border-bottom:2px solid var(--border)">
+        <th style="text-align:left;padding:6px 8px">Mã</th>
+        <th style="text-align:center;padding:6px 4px">Tín hiệu</th>
+        <th style="text-align:right;padding:6px 4px">Cơ bản</th>
+        <th style="text-align:right;padding:6px 4px">Kỹ thuật</th>
+        <th style="text-align:right;padding:6px 4px">Ichimoku</th>
+        <th style="text-align:right;padding:6px 4px">Giá</th>
+        <th style="text-align:center;padding:6px 4px">Hành động</th>
+      </tr></thead><tbody>`;
+
+    results.forEach(r => {
+      const sig = r.signal || {};
+      const ac  = ACTION_CONFIG[sig.action] || ACTION_CONFIG['TRÁNH'];
+      const km  = r.key_metrics || {};
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:9px 8px">
+          <b>${r.ticker}</b>
+          ${r.volume_warning ? `<div style="font-size:.68rem;color:var(--red);margin-top:2px">${r.volume_warning}</div>` : ''}
+        </td>
+        <td style="text-align:center;padding:9px 4px">
+          <span style="font-size:1.1rem">${ac.icon}</span>
+          <div style="font-size:.7rem;color:${ac.fg};font-weight:600">${sig.combined || 0}/100</div>
+        </td>
+        <td style="text-align:right;padding:9px 4px;color:${scoreColor(r.buffett_score)}">${r.buffett_score}/14</td>
+        <td style="text-align:right;padding:9px 4px">${sig.ta_score || 0}/100</td>
+        <td style="text-align:right;padding:9px 4px;font-size:.78rem;color:var(--muted)">${sig.ichi_label || '—'}</td>
+        <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1)+'k' : '—'}</td>
+        <td style="text-align:center;padding:9px 6px">
+          <span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:.75rem;font-weight:700;
+            background:${ac.bg};color:${ac.fg};cursor:pointer" onclick="openInBuffett('${r.ticker}')">${sig.action}</span>
+          <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈</button>
+        </td>
+      </tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+    container.innerHTML = html;
+    container.style.display = 'block';
+  } catch(e) {
+    container.innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`;
+    container.style.display = 'block';
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '🔍 Radar';
+  }
 }
 
 // ═══════════════════════════════════════════

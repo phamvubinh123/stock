@@ -2046,6 +2046,161 @@ async def portfolio_summary(request: Request):
 
 
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# COMBINED SIGNAL + RADAR (Redesign V2, Bước 2-3)
+# ─────────────────────────────────────────────
+
+def calc_combined_signal(buffett_score: int, ta_data: dict) -> dict:
+    """Gộp điểm cơ bản (60%) + kỹ thuật (40%) thành 1 điểm tổng hợp."""
+    fundamental = (buffett_score / 14) * 100
+
+    ta_score = 50  # neutral base
+    ichi  = ta_data.get("ichimoku", {})
+    rsi   = (ta_data.get("latest") or {}).get("rsi", 50) or 50
+    vol   = ta_data.get("volume_signal", {})
+    lat   = ta_data.get("latest", {}) or {}
+    macd_val = lat.get("macd", 0) or 0
+    macd_sig = lat.get("macd_signal", 0) or 0
+
+    if ichi.get("signal") == "bullish":        ta_score += 20
+    elif ichi.get("signal") == "bearish":      ta_score -= 20
+    if ichi.get("tk_cross") == "golden_cross": ta_score += 10
+    elif ichi.get("tk_cross") == "dead_cross": ta_score -= 10
+    if rsi < 35:    ta_score += 10
+    elif rsi > 65:  ta_score -= 10
+    if vol.get("signal") == "bullish":   ta_score += 10
+    elif vol.get("signal") == "bearish": ta_score -= 15
+    if macd_val > macd_sig: ta_score += 5
+    else:                    ta_score -= 5
+    ta_score = max(0, min(100, ta_score))
+
+    combined = fundamental * 0.6 + ta_score * 0.4
+    if combined >= 70:   action, color = "XEM",    "green"
+    elif combined >= 50: action, color = "CHỜ",    "yellow"
+    else:                action, color = "TRÁNH",  "red"
+
+    ichi_label = {"bullish": "Trên mây", "bearish": "Dưới mây"}.get(
+        ichi.get("signal", ""), "Trong mây")
+
+    return {
+        "combined":    round(combined),
+        "fundamental": round(fundamental),
+        "ta_score":    round(ta_score),
+        "action":      action,
+        "color":       color,
+        "ichi_label":  ichi_label,
+    }
+
+def compute_technical_sync(ticker: str, period: int = 90) -> dict:
+    """Tính technical indicators đồng bộ (dùng trong radar)."""
+    try:
+        import pandas as pd
+        Quote = get_quote()
+        ticker = ticker.upper()
+        cache_key = f"technical:{ticker}:{period}"
+        cached = cache_get(cache_key)
+        if cached:
+            return cached
+        end_date   = str(datetime.date.today())
+        start_date = str(datetime.date.today() - datetime.timedelta(days=period * 2))
+        df = Quote(symbol=ticker, source="KBS").history(start=start_date, end=end_date, interval="d")
+        if df is None or df.empty:
+            return {}
+        df = df.reset_index() if df.index.name == "time" else df
+        df = df.tail(period + 50).copy()
+        close = df["close"].astype(float)
+
+        # Ichimoku
+        tenkan = (df["high"].rolling(9).max()  + df["low"].rolling(9).min())  / 2
+        kijun  = (df["high"].rolling(26).max() + df["low"].rolling(26).min()) / 2
+        sa     = ((tenkan + kijun) / 2).shift(26)
+        sb     = ((df["high"].rolling(52).max() + df["low"].rolling(52).min()) / 2).shift(26)
+        cloud_top    = max(safe_float(sa.iloc[-1]) or 0, safe_float(sb.iloc[-1]) or 0)
+        cloud_bottom = min(safe_float(sa.iloc[-1]) or 0, safe_float(sb.iloc[-1]) or 0)
+        price = float(close.iloc[-1])
+        ichi_signal = "bullish" if price > cloud_top else "bearish" if price < cloud_bottom else "neutral"
+        tk_cross = None
+        if len(tenkan) > 1 and len(kijun) > 1:
+            if tenkan.iloc[-2] < kijun.iloc[-2] and tenkan.iloc[-1] > kijun.iloc[-1]:
+                tk_cross = "golden_cross"
+            elif tenkan.iloc[-2] > kijun.iloc[-2] and tenkan.iloc[-1] < kijun.iloc[-1]:
+                tk_cross = "dead_cross"
+
+        # RSI
+        delta = close.diff()
+        gain  = delta.clip(lower=0).rolling(14).mean()
+        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        rs    = gain / loss.replace(0, 1e-9)
+        rsi   = float((100 - 100 / (1 + rs)).iloc[-1])
+
+        # MACD
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        macd_val = float((ema12 - ema26).iloc[-1])
+        macd_sig = float((ema12 - ema26).ewm(span=9, adjust=False).mean().iloc[-1])
+
+        # Volume signal
+        vol_ma20 = float(df["volume"].rolling(20).mean().iloc[-1]) if "volume" in df.columns else 0
+        vol_last = float(df["volume"].iloc[-1]) if "volume" in df.columns else 0
+        vol_ratio = vol_last / vol_ma20 if vol_ma20 > 0 else 1
+        prev_close = float(close.iloc[-2]) if len(close) > 1 else price
+        change_pct = (price - prev_close) / prev_close * 100 if prev_close else 0
+        vol_signal = "neutral"
+        vol_warning = None
+        if change_pct >= 6.5 and vol_ratio > 3:
+            vol_signal = "bearish"; vol_warning = f"⚠️ TRẦN + VOL đột biến {vol_ratio:.1f}x TB20"
+        elif change_pct >= 6.5 and vol_ratio < 1:
+            vol_signal = "bullish"; vol_warning = f"✅ Trần + vol thấp ({vol_ratio:.1f}x TB20)"
+        elif change_pct <= -6.5 and vol_ratio > 2:
+            vol_signal = "bearish"; vol_warning = f"⚠️ SÀN + VOL lớn {vol_ratio:.1f}x TB20"
+
+        result = {
+            "latest": {"close": price, "rsi": round(rsi,2), "macd": round(macd_val,2), "macd_signal": round(macd_sig,2)},
+            "ichimoku": {"signal": ichi_signal, "tk_cross": tk_cross,
+                         "cloud_top": round(cloud_top,2), "cloud_bottom": round(cloud_bottom,2)},
+            "volume_signal": {"signal": vol_signal, "warning": vol_warning,
+                              "vol_ratio": round(vol_ratio,2), "change_pct": round(change_pct,2)},
+        }
+        cache_set(cache_key, result)
+        return result
+    except Exception as e:
+        log.warning(f"compute_technical_sync {ticker}: {e}")
+        return {}
+
+@app.get("/api/radar")
+async def get_radar(request: Request):
+    """Trả về watchlist với điểm tổng hợp cơ bản + kỹ thuật."""
+    u = get_username(request)
+    watchlist = load_watchlist(u)
+    if not watchlist:
+        return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
+
+    loop = asyncio.get_event_loop()
+    sem  = asyncio.Semaphore(3)
+
+    async def _process(ticker: str):
+        async with sem:
+            try:
+                scan_r  = await loop.run_in_executor(None, scan_one_ticker, ticker)
+                ta_data = await loop.run_in_executor(None, compute_technical_sync, ticker)
+                signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+                return {
+                    "ticker":         ticker,
+                    "signal":         signal,
+                    "buffett_score":  scan_r.get("score", 0),
+                    "price":          (ta_data.get("latest") or {}).get("close"),
+                    "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                    "key_metrics":    scan_r.get("key_metrics", {}),
+                }
+            except Exception as e:
+                log.warning(f"Radar {ticker}: {e}")
+                return {"ticker": ticker, "signal": {"combined":0,"action":"TRÁNH","color":"red","ichi_label":"—"}, "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
+
+    results = list(await asyncio.gather(*[_process(t) for t in watchlist]))
+    results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
+    return ok({"results": results, "updated_at": datetime.datetime.now().isoformat()})
+
+
 # ROUTES — SO SÁNH NGÀNH (Phase 4.3)
 # ─────────────────────────────────────────────
 
