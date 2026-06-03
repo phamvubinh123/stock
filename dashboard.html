@@ -289,7 +289,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .bottom-nav { width: 220px; flex-shrink: 0; height: 100vh; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; z-index: 100; box-shadow: 2px 0 8px rgba(0,0,0,.04); }
 .sidebar-logo { height: var(--header-h); display: flex; align-items: center; padding: 0 18px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: .95rem; color: var(--purple); flex-shrink: 0; }
 .sidebar-logo span { color: var(--text2); font-weight: 400; margin-left: 4px; font-size: .78rem; }
-.nav-item { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; color: var(--text2); font-size: .82rem; font-weight: 500; transition: all .15s; border: none; border-left: 3px solid transparent; background: transparent; font-family: var(--sans); padding: 11px 18px; text-align: left; width: 100%; }
+.nav-item { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; color: var(--text2); font-size: .84rem; font-weight: 500; transition: all .15s; border: none; border-left: 3px solid transparent; background: transparent; font-family: var(--sans); padding: 11px 18px; text-align: left; width: 100%; border-radius: 0 8px 8px 0; margin-bottom: 1px; }
+/* 4 module chính lớn hơn */
+.nav-item:not([style*="opacity"]) { font-size: .88rem; padding: 13px 18px; }
 .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
 .nav-item:hover { color: var(--purple); background: var(--purple-light); }
 .nav-item.active { color: var(--purple); background: var(--purple-light); border-left-color: var(--purple); font-weight: 600; }
@@ -436,34 +438,40 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   <!-- SIDEBAR -->
   <nav class="bottom-nav" id="sidebarNav">
     <div class="sidebar-logo">📈 Stock Agent <span>AI</span></div>
+
+    <!-- 4 MODULE CHÍNH -->
     <button class="nav-item active" data-page="daily" onclick="showPage('daily')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Dashboard
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      🔍 Radar
     </button>
     <button class="nav-item" data-page="buffett" onclick="showPage('buffett')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Phân tích cơ bản
-    </button>
-    <button class="nav-item" data-page="technical" onclick="showPage('technical')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      Phân tích kỹ thuật
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      🔬 Phân Tích
     </button>
     <button class="nav-item" data-page="portfolio" onclick="showPage('portfolio')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-      Danh Mục
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+      💼 Danh Mục
     </button>
-    <button class="nav-item" data-page="alerts" onclick="showPage('alerts')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Alerts <span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;font-size:.65rem;padding:1px 6px;margin-left:4px">0</span>
-    </button>
-    <div class="nav-sep"></div>
     <button class="nav-item" data-page="calculator" onclick="showPage('calculator')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
-      Công cụ
+      🧮 Công Cụ
     </button>
+
+    <div class="nav-sep"></div>
+
+    <!-- PHỤ: Alerts + Kỹ thuật (ít dùng hơn) -->
+    <button class="nav-item" data-page="alerts" onclick="showPage('alerts')" style="font-size:.78rem;opacity:.85">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Alerts <span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;font-size:.6rem;padding:1px 5px;margin-left:3px">0</span>
+    </button>
+    <button class="nav-item" data-page="technical" onclick="showPage('technical')" style="font-size:.78rem;opacity:.85">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Chart KT
+    </button>
+
     <div class="sidebar-footer">
       <div id="sidebarUser" style="font-weight:600;color:var(--purple);margin-bottom:4px"></div>
-      <div style="cursor:pointer;color:var(--red)" onclick="doLogout()">⎋ Đăng xuất</div>
+      <div style="cursor:pointer;color:var(--red);font-size:.78rem" onclick="doLogout()">⎋ Đăng xuất</div>
     </div>
   </nav>
 
