@@ -590,6 +590,8 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
             </div>
             <button class="btn btn-primary" id="btnRadar" onclick="triggerRadar()" style="flex-shrink:0;white-space:nowrap">🔍 Scan</button>
           </div>
+          <div class="progress-bar" id="radarProgBar"><div class="progress-fill"></div></div>
+          <div id="radarProgMsg" style="display:none;font-size:.78rem;color:var(--muted);padding:4px 2px;text-align:center"></div>
         </div>
         <span id="sumScore" style="display:none"></span>
         <span id="sumChange" style="display:none"></span>
@@ -1141,17 +1143,6 @@ function showSubPage(group, pageId, tabEl) {
   const navId = GROUP_SUBNAV[group];
   if (navId) document.querySelectorAll(`#${navId} .page-sub-tab`).forEach(t => t.classList.remove('active'));
   if (tabEl) tabEl.classList.add('active');
-  // Auto-fetch khi chuyển sang technical nếu đã có mã
-  if (pageId === 'technical') {
-    const ma = document.getElementById('taMA')?.value?.trim();
-    if (ma) fetchTA();
-  }
-  // Auto-fetch khi chuyển sang buffett nếu đã có mã nhưng chưa load
-  if (pageId === 'buffett') {
-    const ma = document.getElementById('maCP')?.value?.trim();
-    const hasResult = document.getElementById('results')?.classList.contains('show');
-    if (ma && !hasResult) fetchData();
-  }
 }
 
 function showPage(id) {
@@ -2410,13 +2401,13 @@ const ACTION_CONFIG = {
 };
 
 async function loadRadarCache() {
-  const container = document.getElementById('radarContainer');
   try {
     const r = await fetch('/api/radar?cache_only=1', { headers: {'X-Token': authToken} });
     const d = await r.json();
-    const results = d.results || [];
-    if (!results.length) return; // watchlist trống, không hiện gì
-    renderRadarTable(results, d.updated_at, /*fromCache=*/true);
+    // Chỉ hiện các mã đã có trong cache, bỏ qua not_scanned
+    const scanned = (d.results || []).filter(x => !x.not_scanned);
+    if (!scanned.length) return; // không có gì đã scan → không hiện bảng
+    renderRadarTable(scanned, d.updated_at, /*fromCache=*/true);
   } catch(e) { console.error('loadRadarCache:', e); }
 }
 
@@ -2426,7 +2417,7 @@ function renderRadarTable(results, updatedAt, fromCache) {
   const scanHint = fromCache ? ' <span style="font-size:.7rem;color:var(--muted)">(nhấn Scan để cập nhật)</span>' : '';
   let html = `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="card-title" style="margin:0">🔍 Scan <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updStr}</span>${scanHint}</div>
+      <div class="card-title" style="margin:0">🔍 Scan${updStr ? ` <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updStr}</span>` : ''}${scanHint}</div>
       <button class="btn" style="font-size:.72rem" onclick="triggerRadar()">↻ Quét lại</button>
     </div>
     <div style="overflow-x:auto">
@@ -2484,10 +2475,16 @@ function radarRow(r) {
   </tr>`;
 }
 
+const RADAR_MSGS = ['Đang kéo dữ liệu tài chính...','Đang tính điểm Buffett...','Đang phân tích kỹ thuật...','Đang tổng hợp tín hiệu...'];
 async function triggerRadar() {
   const btn = document.getElementById('btnRadar');
   const container = document.getElementById('radarContainer');
+  const prog = document.getElementById('radarProgBar');
+  const pmsg = document.getElementById('radarProgMsg');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang quét...';
+  prog.classList.add('show'); pmsg.style.display = 'block';
+  let mi = 0; pmsg.textContent = RADAR_MSGS[0];
+  const iv = setInterval(() => { mi = (mi+1)%RADAR_MSGS.length; pmsg.textContent = RADAR_MSGS[mi]; }, 1200);
   try {
     const r = await fetch('/api/radar', { headers: {'X-Token': authToken} });
     if (!r.ok) throw new Error(`Server lỗi ${r.status}`);
@@ -2503,7 +2500,9 @@ async function triggerRadar() {
     container.style.display = 'block';
     console.error(e);
   } finally {
+    clearInterval(iv);
     btn.disabled = false; btn.innerHTML = '🔍 Scan';
+    prog.classList.remove('show'); pmsg.style.display = 'none';
   }
 }
 
@@ -2781,18 +2780,19 @@ async function addTicker(ticker) {
   // Thêm vào watchlist
   await addToWl(t);
 
-  // Nếu bảng chưa tồn tại → load cache trước (không scan)
+  // Đảm bảo bảng radar đang hiện — nếu chưa có thì tạo cấu trúc rỗng
   let tbody = document.querySelector('#radarContainer tbody');
   if (!tbody) {
-    await loadRadarCache();
+    // Tạo bảng trống, không rebuild từ cache
+    renderRadarTable([], null, false);
     tbody = document.querySelector('#radarContainer tbody');
-    if (!tbody) return; // watchlist vẫn trống sau cache load
+    if (!tbody) return;
   }
 
   // Mã đã có trong bảng rồi → không append nữa
   if (tbody.querySelector(`tr[data-ticker="${t}"]`)) return;
 
-  // Thêm row loading placeholder cuối bảng
+  // Append row loading placeholder xuống cuối — KHÔNG xóa rows cũ
   const placeholder = document.createElement('tr');
   placeholder.dataset.ticker = t;
   placeholder.style.borderBottom = '1px solid var(--border)';
@@ -2803,11 +2803,17 @@ async function addTicker(ticker) {
 
   try {
     const r = await fetch(`/api/radar/scan-one?ticker=${t}`, { headers: {'X-Token': authToken} });
-    const d = await r.json();
+    let d;
+    try { d = await r.json(); } catch(_) { throw new Error('Server lỗi — thử lại'); }
     if (!r.ok) throw new Error(d.detail || 'Lỗi scan');
     placeholder.outerHTML = radarRow(d.result);
   } catch(e) {
-    placeholder.innerHTML = `<td colspan="8" style="padding:10px 12px;color:var(--red);font-size:.83rem">⚠ Không scan được ${t}: ${e.message}</td>`;
+    placeholder.innerHTML = `<td style="padding:10px 12px;color:var(--muted)"><b>${t}</b></td>
+      <td colspan="6" style="padding:10px 4px;color:var(--red);font-size:.78rem">⚠ ${e.message}</td>
+      <td style="text-align:center;padding:10px 6px;white-space:nowrap">
+        <button class="btn-row" onclick="openInBuffett('${t}')">📊 Cơ bản</button>
+        <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${t}')">📈 Kỹ thuật</button>
+      </td>`;
   }
 }
 
