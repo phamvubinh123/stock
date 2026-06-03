@@ -1099,6 +1099,7 @@ function enterApp(username) {
   loadWatchlist();
   loadTriggeredAlerts();
   loadPortfolio();
+  triggerRadar();
 }
 
 // Check session khi load
@@ -2406,6 +2407,33 @@ const ACTION_CONFIG = {
   TRÁNH: { bg: 'var(--red-bg)',    fg: 'var(--red)',     icon: '🔴' },
 };
 
+function radarRow(r) {
+  const sig = r.signal || {};
+  const ac  = ACTION_CONFIG[sig.action] || ACTION_CONFIG['TRÁNH'];
+  return `<tr data-ticker="${r.ticker}" style="border-bottom:1px solid var(--border)">
+    <td style="padding:9px 8px">
+      <b>${r.ticker}</b>
+      ${r.volume_warning ? `<div style="font-size:.68rem;color:var(--red);margin-top:2px">${r.volume_warning}</div>` : ''}
+    </td>
+    <td style="text-align:center;padding:9px 4px">
+      <span style="font-size:1.1rem">${ac.icon}</span>
+      <div style="font-size:.7rem;color:${ac.fg};font-weight:600">${sig.combined || 0}/100</div>
+    </td>
+    <td style="text-align:right;padding:9px 4px;color:${scoreColor(r.buffett_score)}">${r.buffett_score}/14</td>
+    <td style="text-align:right;padding:9px 4px">${sig.ta_score || 0}/100</td>
+    <td style="text-align:right;padding:9px 4px;font-size:.78rem;color:var(--muted)">${sig.ichi_label || '—'}</td>
+    <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1) : '—'}</td>
+    <td style="text-align:center;padding:9px 6px">
+      <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:700;
+        background:${ac.bg};color:${ac.fg}">${sig.action}</span>
+    </td>
+    <td style="text-align:center;padding:9px 6px;white-space:nowrap">
+      <button class="btn-row" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
+      <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
+    </td>
+  </tr>`;
+}
+
 async function triggerRadar() {
   const btn = document.getElementById('btnRadar');
   const container = document.getElementById('radarContainer');
@@ -2442,33 +2470,7 @@ async function triggerRadar() {
         <th style="text-align:center;padding:6px 4px">Phân tích</th>
       </tr></thead><tbody>`;
 
-    results.forEach(r => {
-      const sig = r.signal || {};
-      const ac  = ACTION_CONFIG[sig.action] || ACTION_CONFIG['TRÁNH'];
-      const km  = r.key_metrics || {};
-      html += `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:9px 8px">
-          <b>${r.ticker}</b>
-          ${r.volume_warning ? `<div style="font-size:.68rem;color:var(--red);margin-top:2px">${r.volume_warning}</div>` : ''}
-        </td>
-        <td style="text-align:center;padding:9px 4px">
-          <span style="font-size:1.1rem">${ac.icon}</span>
-          <div style="font-size:.7rem;color:${ac.fg};font-weight:600">${sig.combined || 0}/100</div>
-        </td>
-        <td style="text-align:right;padding:9px 4px;color:${scoreColor(r.buffett_score)}">${r.buffett_score}/14</td>
-        <td style="text-align:right;padding:9px 4px">${sig.ta_score || 0}/100</td>
-        <td style="text-align:right;padding:9px 4px;font-size:.78rem;color:var(--muted)">${sig.ichi_label || '—'}</td>
-        <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1) : '—'}</td>
-        <td style="text-align:center;padding:9px 6px">
-          <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:700;
-            background:${ac.bg};color:${ac.fg}">${sig.action}</span>
-        </td>
-        <td style="text-align:center;padding:9px 6px;white-space:nowrap">
-          <button class="btn-row" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
-          <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
-        </td>
-      </tr>`;
-    });
+    results.forEach(r => { html += radarRow(r); });
     html += `</tbody></table></div></div>`;
     container.innerHTML = html;
     container.style.display = 'block';
@@ -2751,7 +2753,34 @@ async function addTicker(ticker) {
   const inp = document.getElementById('radarSearch');
   if (inp) inp.value = '';
   document.getElementById('autocompleteList').style.display = 'none';
+
+  // Thêm vào watchlist
   await addToWl(t);
+
+  // Nếu bảng radar đang hiện → scan 1 mã và append, không scan lại hết
+  const tbody = document.querySelector('#radarContainer tbody');
+  if (!tbody) { triggerRadar(); return; }
+
+  // Kiểm tra mã đã có trong bảng chưa
+  if (tbody.querySelector(`tr[data-ticker="${t}"]`)) return;
+
+  // Thêm row loading placeholder
+  const placeholder = document.createElement('tr');
+  placeholder.dataset.ticker = t;
+  placeholder.style.borderBottom = '1px solid var(--border)';
+  placeholder.innerHTML = `<td colspan="8" style="padding:10px 12px;color:var(--muted);font-size:.83rem">
+    <span class="spinner"></span> Đang scan <b>${t}</b>...
+  </td>`;
+  tbody.appendChild(placeholder);
+
+  try {
+    const r = await fetch(`/api/radar/scan-one?ticker=${t}`, { headers: {'X-Token': authToken} });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Lỗi scan');
+    placeholder.outerHTML = radarRow(d.result);
+  } catch(e) {
+    placeholder.innerHTML = `<td colspan="8" style="padding:10px 12px;color:var(--red);font-size:.83rem">⚠ Không scan được ${t}: ${e.message}</td>`;
+  }
 }
 
 document.addEventListener('click', e => {

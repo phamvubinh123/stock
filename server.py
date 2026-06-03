@@ -2528,6 +2528,35 @@ async def get_radar(request: Request):
         return ok({"results": [], "error": str(e), "updated_at": datetime.datetime.now().isoformat()})
 
 
+@app.get("/api/radar/scan-one")
+async def radar_scan_one(ticker: str = Query(...)):
+    """Scan nhanh 1 mã duy nhất — dùng khi thêm mã mới vào watchlist."""
+    ticker = ticker.upper()
+    cache_map = {}
+    if os.path.exists(VN30_RADAR_CACHE):
+        try:
+            with open(VN30_RADAR_CACHE) as f:
+                cache_map = {r["ticker"]: r for r in json.load(f).get("results", [])}
+        except: pass
+    if ticker in cache_map:
+        return ok({"result": cache_map[ticker]})
+    try:
+        loop = asyncio.get_running_loop()
+        def _do():
+            scan_r  = scan_one_ticker(ticker)
+            ta_data = compute_technical_sync(ticker)
+            signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+            return {"ticker": ticker, "signal": signal,
+                    "buffett_score": scan_r.get("score", 0),
+                    "price": (ta_data.get("latest") or {}).get("close"),
+                    "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                    "key_metrics": scan_r.get("key_metrics", {})}
+        result = await loop.run_in_executor(None, _do)
+        return ok({"result": result})
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # ROUTES — SO SÁNH NGÀNH (Phase 4.3)
 # ─────────────────────────────────────────────
 
