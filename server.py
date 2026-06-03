@@ -103,6 +103,17 @@ def init_db():
         data       JSONB,
         created_at TIMESTAMP DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS alerts (
+        id           VARCHAR(50) PRIMARY KEY,
+        username     VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        ticker       VARCHAR(10) NOT NULL,
+        type         VARCHAR(30) NOT NULL,
+        value        FLOAT NOT NULL,
+        active       BOOLEAN DEFAULT TRUE,
+        triggered_at TIMESTAMP,
+        last_checked TIMESTAMP,
+        created_at   TIMESTAMP DEFAULT NOW()
+    );
     """
     conn = get_conn()
     try:
@@ -700,7 +711,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.warning(f"DB init warning: {e}")
     log.info("🚀 Stock Agent AI started")
+
+    # Alert checker — chạy mỗi 15 phút
+    async def _alert_loop():
+        while True:
+            await asyncio.sleep(900)  # 15 phút
+            await _check_all_alerts()
+
+    alert_task = asyncio.create_task(_alert_loop())
     yield
+    alert_task.cancel()
     log.info("Stock Agent AI stopped")
 
 
@@ -1908,6 +1928,136 @@ def delete_dca_ticker(ticker: str, request: Request):
     save_dca(data, u)
     return ok({"ok": True})
 
+
+# ─────────────────────────────────────────────
+# ROUTES — AI ALERT SYSTEM (Phase 3)
+# ─────────────────────────────────────────────
+
+def _alert_row_to_dict(row) -> dict:
+    return {
+        "id":           row["id"],
+        "ticker":       row["ticker"],
+        "type":         row["type"],
+        "value":        row["value"],
+        "active":       row["active"],
+        "triggered_at": row["triggered_at"].isoformat() if row["triggered_at"] else None,
+        "last_checked": row["last_checked"].isoformat() if row["last_checked"] else None,
+        "created_at":   row["created_at"].isoformat() if row["created_at"] else None,
+    }
+
+@app.post("/api/alerts")
+async def create_alert(request: Request, body: dict = Body(...)):
+    u = get_username(request)
+    alert_id = str(int(datetime.datetime.now().timestamp() * 1000))
+    ticker = body.get("ticker", "").upper().strip()
+    atype  = body.get("type", "")
+    value  = float(body.get("value", 0))
+    VALID_TYPES = {"price_above","price_below","rsi_oversold","rsi_overbought","score_change"}
+    if not ticker or atype not in VALID_TYPES:
+        raise HTTPException(400, "Thiếu ticker hoặc type không hợp lệ")
+    if USE_DB:
+        db_exec(
+            "INSERT INTO alerts (id,username,ticker,type,value) VALUES (%s,%s,%s,%s,%s)",
+            (alert_id, u, ticker, atype, value)
+        )
+    return ok({"id": alert_id, "ticker": ticker, "type": atype, "value": value})
+
+@app.get("/api/alerts")
+def get_alerts(request: Request):
+    u = get_username(request)
+    if USE_DB:
+        rows = db_exec("SELECT * FROM alerts WHERE username=%s ORDER BY created_at DESC", (u,), fetch="all")
+        return ok({"alerts": [_alert_row_to_dict(r) for r in (rows or [])]})
+    return ok({"alerts": []})
+
+@app.delete("/api/alerts/{alert_id}")
+def delete_alert(alert_id: str, request: Request):
+    u = get_username(request)
+    if USE_DB:
+        db_exec("DELETE FROM alerts WHERE id=%s AND username=%s", (alert_id, u))
+    return ok({"deleted": alert_id})
+
+@app.get("/api/alerts/triggered")
+def get_triggered_alerts(request: Request):
+    u = get_username(request)
+    if USE_DB:
+        rows = db_exec(
+            "SELECT * FROM alerts WHERE username=%s AND triggered_at IS NOT NULL AND active=TRUE ORDER BY triggered_at DESC",
+            (u,), fetch="all"
+        )
+        return ok({"triggered": [_alert_row_to_dict(r) for r in (rows or [])]})
+    return ok({"triggered": []})
+
+@app.post("/api/alerts/{alert_id}/reset")
+def reset_alert(alert_id: str, request: Request):
+    u = get_username(request)
+    if USE_DB:
+        db_exec(
+            "UPDATE alerts SET triggered_at=NULL, active=TRUE, last_checked=NULL WHERE id=%s AND username=%s",
+            (alert_id, u)
+        )
+    return ok({"reset": alert_id})
+
+# ── Alert checker — chạy mỗi 15 phút, 9:00–15:30 VN (UTC+7)
+async def _check_all_alerts():
+    """Kiểm tra tất cả active alerts, trigger nếu điều kiện thoả."""
+    if not USE_DB:
+        return
+    try:
+        import pytz
+        tz_vn = pytz.timezone("Asia/Ho_Chi_Minh")
+        now_vn = datetime.datetime.now(tz_vn)
+        # Chỉ chạy trong giờ giao dịch
+        if not (9 <= now_vn.hour < 16):
+            return
+        rows = db_exec(
+            "SELECT * FROM alerts WHERE active=TRUE AND triggered_at IS NULL",
+            fetch="all"
+        ) or []
+        if not rows:
+            return
+        # Gom tickers cần check giá
+        tickers = list({r["ticker"] for r in rows})
+        prices, rsis = {}, {}
+        loop = asyncio.get_event_loop()
+        for t in tickers:
+            try:
+                Quote = get_quote()
+                today = str(datetime.date.today())
+                m_ago = str(datetime.date.today() - datetime.timedelta(days=30))
+                df = await loop.run_in_executor(
+                    None, lambda: Quote(symbol=t, source="KBS").history(start=m_ago, end=today)
+                )
+                if df is not None and not df.empty:
+                    prices[t] = float(df["close"].iloc[-1])
+                    close = df["close"].astype(float)
+                    delta = close.diff()
+                    gain = delta.clip(lower=0).rolling(14).mean()
+                    loss = (-delta.clip(upper=0)).rolling(14).mean()
+                    rs = gain / loss.replace(0, 1e-9)
+                    rsis[t] = float((100 - 100 / (1 + rs)).iloc[-1])
+            except Exception:
+                pass
+        for row in rows:
+            t = row["ticker"]
+            atype = row["type"]
+            val = float(row["value"])
+            price = prices.get(t)
+            rsi   = rsis.get(t)
+            triggered = False
+            if atype == "price_above"    and price and price >= val: triggered = True
+            if atype == "price_below"    and price and price <= val: triggered = True
+            if atype == "rsi_oversold"   and rsi   and rsi  <= val: triggered = True
+            if atype == "rsi_overbought" and rsi   and rsi  >= val: triggered = True
+            db_exec(
+                "UPDATE alerts SET last_checked=%s" + (", triggered_at=%s" if triggered else "") + " WHERE id=%s",
+                (datetime.datetime.utcnow(), datetime.datetime.utcnow(), row["id"]) if triggered
+                else (datetime.datetime.utcnow(), row["id"])
+            )
+            if triggered:
+                log.info(f"🔔 Alert triggered: {row['username']} {t} {atype} val={val} price={price} rsi={rsi}")
+    except Exception as e:
+        log.error(f"Alert checker error: {e}")
 
 if __name__ == "__main__":
     import uvicorn
