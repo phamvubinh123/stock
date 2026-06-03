@@ -1099,7 +1099,7 @@ function enterApp(username) {
   loadWatchlist();
   loadTriggeredAlerts();
   loadPortfolio();
-  triggerRadar();
+  loadRadarCache(); // Load từ cache ngay, không scan
 }
 
 // Check session khi load
@@ -2409,7 +2409,55 @@ const ACTION_CONFIG = {
   TRÁNH: { bg: 'var(--red-bg)',    fg: 'var(--red)',     icon: '🔴' },
 };
 
+async function loadRadarCache() {
+  const container = document.getElementById('radarContainer');
+  try {
+    const r = await fetch('/api/radar?cache_only=1', { headers: {'X-Token': authToken} });
+    const d = await r.json();
+    const results = d.results || [];
+    if (!results.length) return; // watchlist trống, không hiện gì
+    renderRadarTable(results, d.updated_at, /*fromCache=*/true);
+  } catch(e) { console.error('loadRadarCache:', e); }
+}
+
+function renderRadarTable(results, updatedAt, fromCache) {
+  const container = document.getElementById('radarContainer');
+  const updStr = updatedAt ? updatedAt.slice(0,16).replace('T',' ') : '';
+  const scanHint = fromCache ? ' <span style="font-size:.7rem;color:var(--muted)">(nhấn Scan để cập nhật)</span>' : '';
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">🔍 Scan <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updStr}</span>${scanHint}</div>
+      <button class="btn" style="font-size:.72rem" onclick="triggerRadar()">↻ Quét lại</button>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:.83rem">
+    <thead><tr style="color:var(--muted);border-bottom:2px solid var(--border)">
+      <th style="text-align:left;padding:6px 8px">Mã</th>
+      <th style="text-align:center;padding:6px 4px">Tín hiệu</th>
+      <th style="text-align:right;padding:6px 4px">Cơ bản</th>
+      <th style="text-align:right;padding:6px 4px">Kỹ thuật</th>
+      <th style="text-align:right;padding:6px 4px">Ichimoku</th>
+      <th style="text-align:right;padding:6px 4px">Giá</th>
+      <th style="text-align:center;padding:6px 4px">Hành động</th>
+      <th style="text-align:center;padding:6px 4px">Phân tích</th>
+    </tr></thead><tbody>`;
+  results.forEach(r => { html += radarRow(r); });
+  html += `</tbody></table></div></div>`;
+  container.innerHTML = html;
+  container.style.display = 'block';
+}
+
 function radarRow(r) {
+  if (r.not_scanned) {
+    return `<tr data-ticker="${r.ticker}" style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 8px"><b>${r.ticker}</b></td>
+      <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">Chưa scan — nhấn Scan để cập nhật</td>
+      <td style="text-align:center;padding:9px 6px;white-space:nowrap">
+        <button class="btn-row" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
+        <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
+      </td>
+    </tr>`;
+  }
   const sig = r.signal || {};
   const ac  = ACTION_CONFIG[sig.action] || ACTION_CONFIG['TRÁNH'];
   return `<tr data-ticker="${r.ticker}" style="border-bottom:1px solid var(--border)">
@@ -2439,43 +2487,17 @@ function radarRow(r) {
 async function triggerRadar() {
   const btn = document.getElementById('btnRadar');
   const container = document.getElementById('radarContainer');
-  const picks = document.getElementById('picksContainer');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang quét...';
-  container.style.display = 'none';
-  picks.style.display = 'none';
   try {
     const r = await fetch('/api/radar', { headers: {'X-Token': authToken} });
-    if (!r.ok) { const txt = await r.text(); throw new Error(`Server lỗi ${r.status}: ${txt.slice(0,120)}`); }
+    if (!r.ok) throw new Error(`Server lỗi ${r.status}`);
     const d = await r.json();
-
     const results = d.results || [];
     if (!results.length) {
       container.innerHTML = '<div class="empty">Watchlist trống — thêm mã trước</div>';
       container.style.display = 'block'; return;
     }
-    const updatedAt = d.updated_at ? d.updated_at.slice(0,16).replace('T',' ') : '';
-    let html = `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="card-title" style="margin:0">🔍 Scan <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updatedAt}</span></div>
-        <button class="btn" style="font-size:.72rem" onclick="triggerRadar()">↻ Quét lại</button>
-      </div>
-      <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:.83rem">
-      <thead><tr style="color:var(--muted);border-bottom:2px solid var(--border)">
-        <th style="text-align:left;padding:6px 8px">Mã</th>
-        <th style="text-align:center;padding:6px 4px">Tín hiệu</th>
-        <th style="text-align:right;padding:6px 4px">Cơ bản</th>
-        <th style="text-align:right;padding:6px 4px">Kỹ thuật</th>
-        <th style="text-align:right;padding:6px 4px">Ichimoku</th>
-        <th style="text-align:right;padding:6px 4px">Giá</th>
-        <th style="text-align:center;padding:6px 4px">Hành động</th>
-        <th style="text-align:center;padding:6px 4px">Phân tích</th>
-      </tr></thead><tbody>`;
-
-    results.forEach(r => { html += radarRow(r); });
-    html += `</tbody></table></div></div>`;
-    container.innerHTML = html;
-    container.style.display = 'block';
+    renderRadarTable(results, d.updated_at, false);
   } catch(e) {
     container.innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`;
     container.style.display = 'block';
@@ -2759,14 +2781,18 @@ async function addTicker(ticker) {
   // Thêm vào watchlist
   await addToWl(t);
 
-  // Nếu bảng radar đang hiện → scan 1 mã và append, không scan lại hết
-  const tbody = document.querySelector('#radarContainer tbody');
-  if (!tbody) { triggerRadar(); return; }
+  // Nếu bảng chưa tồn tại → load cache trước (không scan)
+  let tbody = document.querySelector('#radarContainer tbody');
+  if (!tbody) {
+    await loadRadarCache();
+    tbody = document.querySelector('#radarContainer tbody');
+    if (!tbody) return; // watchlist vẫn trống sau cache load
+  }
 
-  // Kiểm tra mã đã có trong bảng chưa
+  // Mã đã có trong bảng rồi → không append nữa
   if (tbody.querySelector(`tr[data-ticker="${t}"]`)) return;
 
-  // Thêm row loading placeholder
+  // Thêm row loading placeholder cuối bảng
   const placeholder = document.createElement('tr');
   placeholder.dataset.ticker = t;
   placeholder.style.borderBottom = '1px solid var(--border)';

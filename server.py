@@ -2517,9 +2517,28 @@ def _radar_sync(username: str) -> dict:
 
 
 @app.get("/api/radar")
-async def get_radar(request: Request):
+async def get_radar(request: Request, cache_only: int = Query(0)):
+    """cache_only=1: chỉ đọc cache, không scan — nhanh, dùng khi load trang."""
     try:
         u = get_username(request)
+        if cache_only:
+            watchlist = load_watchlist(u)
+            cache_map = {}
+            updated_at = None
+            if os.path.exists(VN30_RADAR_CACHE):
+                try:
+                    with open(VN30_RADAR_CACHE) as f:
+                        cache = json.load(f)
+                    cache_map = {r["ticker"]: r for r in cache.get("results", [])}
+                    updated_at = cache.get("updated_at")
+                except Exception: pass
+            results = [cache_map[t] for t in watchlist if t in cache_map]
+            # Tickers chưa có trong cache → placeholder "chưa scan"
+            for t in watchlist:
+                if t not in cache_map:
+                    results.append({"ticker": t, "signal": {"combined":0,"action":"—","color":"gray","ichi_label":"—","ta_score":0,"fundamental":0},
+                                    "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}, "not_scanned":True})
+            return ok({"results": results, "updated_at": updated_at, "from_cache": True})
         loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, _radar_sync, u)
         return ok(data)
