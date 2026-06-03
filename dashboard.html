@@ -1280,6 +1280,7 @@ async function fetchData() {
   const btn = document.getElementById('btnFetch');
   btn.disabled = true;
   document.getElementById('btnTxt').innerHTML = '<span class="spinner"></span>Đang kéo...';
+  document.getElementById('progBar').classList.add('show');
   document.getElementById('logBox').innerHTML = '';
   document.getElementById('results').classList.remove('show');
   const btnA = document.getElementById('btnAnalyze');
@@ -1319,7 +1320,7 @@ async function fetchData() {
     log(`Hoàn tất — ${d.overview?.ten_cty || ma}`, 'ok');
     if (btnA) { btnA.disabled = false; btnA.style.opacity = '1'; btnA.style.cursor = 'pointer'; }
   } catch(err) { log(err.message, 'err'); }
-  finally { btn.disabled = false; document.getElementById('btnTxt').textContent = 'Kéo dữ liệu'; }
+  finally { btn.disabled = false; document.getElementById('btnTxt').textContent = 'Kéo dữ liệu'; document.getElementById('progBar').classList.remove('show'); }
 }
 
 // ═══════════════════════════════════════════
