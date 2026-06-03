@@ -479,7 +479,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     </header>
 
     <div class="progress-bar" id="progBar"><div class="progress-fill"></div></div>
-    <div id="scanNotice" style="display:none;text-align:center;font-size:.75rem;color:var(--text3);padding:4px 0">Vui lòng chờ đợi kết quả...</div>
+    <div id="scanNotice" style="display:none;text-align:center;font-size:.8rem;color:var(--muted);padding:5px 0"></div>
 
     <!-- Sub-navs -->
     <nav class="sub-nav" id="subNavDaily"></nav>
@@ -542,6 +542,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
               <span id="btnTxt">Kéo dữ liệu</span>
             </button>
           </div>
+          <div id="fetchMsg" style="display:none;font-size:.8rem;color:var(--muted);padding:6px 2px;text-align:center"></div>
           <div class="log" id="logBox"></div>
         </div>
         <div class="card">
@@ -1223,11 +1224,24 @@ function renderPicks() {
   container.innerHTML = html + '</div>';
 }
 
+const SCAN_MSGS = [
+  'Đang kết nối vnstock...',
+  'Đang kéo báo cáo tài chính...',
+  'Đang tính điểm Buffett...',
+  'Đang phân tích tăng trưởng doanh thu...',
+  'Đang kiểm tra biên lợi nhuận...',
+  'Đang đánh giá chỉ số nợ...',
+  'Đang so sánh P/E và ROE...',
+  'Đang tổng hợp kết quả...',
+];
+
 async function triggerScan() {
   const btn = document.getElementById('btnScan'), notice = document.getElementById('scanNotice');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang scan...'; }
   document.getElementById('progBar').classList.add('show');
-  if (notice) notice.style.display = 'block';
+  if (notice) { notice.style.display = 'block'; notice.textContent = SCAN_MSGS[0]; }
+  let smi = 0;
+  const scanTicker = setInterval(() => { smi=(smi+1)%SCAN_MSGS.length; if(notice) notice.textContent=SCAN_MSGS[smi]; }, 1200);
   picksData = {top_picks:[],watchable:[],avoid:[]};
   document.getElementById('picksContainer').innerHTML =
     `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>P/E</span><span>Biên gộp</span><span>Giá</span></div><div id="streamRows"></div></div>`;
@@ -1237,6 +1251,8 @@ async function triggerScan() {
       es.onmessage = (e) => {
         const d = JSON.parse(e.data);
         if (d.__done__) { picksData = d; renderPicks(); updateSummary(d); es.close(); resolve(); return; }
+        // Cập nhật message real-time theo mã đang scan
+        if (notice) notice.textContent = `Đang phân tích ${d.ticker}... (score: ${d.score||0}/14)`;
         const clr = scoreColor(d.score||0), fillW = Math.round(((d.score||0)/14)*100), km = d.key_metrics||{};
         const row = document.createElement('div');
         row.className = `table-row ${scoreRowClass(d.score||0)}`;
@@ -1252,6 +1268,7 @@ async function triggerScan() {
     });
   } catch(e) { console.error(e); }
   finally {
+    clearInterval(scanTicker);
     if (btn) { btn.disabled = false; btn.textContent = 'Scan ngay'; }
     document.getElementById('progBar').classList.remove('show');
     if (notice) notice.style.display = 'none';
@@ -1273,14 +1290,29 @@ function openInTechnical(ticker) {
 // ═══════════════════════════════════════════
 // FETCH DATA (Buffett)
 // ═══════════════════════════════════════════
+const FETCH_MSGS = [
+  'Đang kết nối nguồn dữ liệu VCI...',
+  'Đang tải báo cáo kết quả kinh doanh...',
+  'Đang tải bảng cân đối kế toán...',
+  'Đang tải báo cáo lưu chuyển tiền tệ...',
+  'Đang tính ROE, ROA, EPS...',
+  'Đang tính CAGR doanh thu & lợi nhuận...',
+  'Đang xử lý dữ liệu tài chính...',
+  'Gần xong rồi, chờ tí nhé...',
+];
+
 async function fetchData() {
   const ma = document.getElementById('maCP').value.trim().toUpperCase();
   if (!ma) { alert('Nhập mã CP!'); return; }
   const n = document.getElementById('soNam').value || 5, ky = document.getElementById('kyBC').value;
   const btn = document.getElementById('btnFetch');
+  const fmsg = document.getElementById('fetchMsg');
   btn.disabled = true;
   document.getElementById('btnTxt').innerHTML = '<span class="spinner"></span>Đang kéo...';
   document.getElementById('progBar').classList.add('show');
+  if (fmsg) { fmsg.style.display='block'; fmsg.textContent=FETCH_MSGS[0]; }
+  let fmi=0;
+  const fetchTicker = setInterval(()=>{ fmi=(fmi+1)%FETCH_MSGS.length; if(fmsg) fmsg.textContent=FETCH_MSGS[fmi]; }, 1000);
   document.getElementById('logBox').innerHTML = '';
   document.getElementById('results').classList.remove('show');
   const btnA = document.getElementById('btnAnalyze');
@@ -1320,7 +1352,13 @@ async function fetchData() {
     log(`Hoàn tất — ${d.overview?.ten_cty || ma}`, 'ok');
     if (btnA) { btnA.disabled = false; btnA.style.opacity = '1'; btnA.style.cursor = 'pointer'; }
   } catch(err) { log(err.message, 'err'); }
-  finally { btn.disabled = false; document.getElementById('btnTxt').textContent = 'Kéo dữ liệu'; document.getElementById('progBar').classList.remove('show'); }
+  finally {
+    clearInterval(fetchTicker);
+    btn.disabled = false;
+    document.getElementById('btnTxt').textContent = 'Kéo dữ liệu';
+    document.getElementById('progBar').classList.remove('show');
+    if (fmsg) fmsg.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════
