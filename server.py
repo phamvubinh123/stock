@@ -1293,9 +1293,13 @@ async def fetch_ticker(
         result["ok"] = False
         result["message"] = str(e)
 
-    if result.get("ok"):
-        cache_set(cache_key, result)
-    return ok(result)
+    try:
+        if result.get("ok"):
+            cache_set(cache_key, result)
+        return ok(result)
+    except Exception as se:
+        log.error(f"Serialization error for {ticker}: {se}")
+        raise HTTPException(500, f"Lỗi serialize dữ liệu: {se}")
 
 
 @app.get("/api/buffett-score/{ticker}")
@@ -1756,19 +1760,24 @@ Hãy đưa ra:
 
 Trả lời bằng tiếng Việt, súc tích, thực chiến. Dùng bullet points."""
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        res = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"Content-Type":"application/json","x-api-key":api_key,"anthropic-version":"2023-06-01"},
-            json={"model":"claude-haiku-4-5-20251001","max_tokens":1000,
-                  "system":f"Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam.\n{STREET_SMART_RULES}",
-                  "messages":[{"role":"user","content":prompt}]},
-        )
-    data = res.json()
-    if not res.is_success:
-        raise HTTPException(res.status_code, data.get("error",{}).get("message","Lỗi API"))
-    text = data["content"][0]["text"] if data.get("content") else ""
-    return ok({"analysis": text, "ticker": ticker})
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"Content-Type":"application/json","x-api-key":api_key,"anthropic-version":"2023-06-01"},
+                json={"model":"claude-haiku-4-5-20251001","max_tokens":1000,
+                      "system":f"Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam.\n{STREET_SMART_RULES}",
+                      "messages":[{"role":"user","content":prompt}]},
+            )
+        data = res.json()
+        if not res.is_success:
+            raise HTTPException(res.status_code, data.get("error",{}).get("message","Lỗi API"))
+        text = data["content"][0]["text"] if data.get("content") else ""
+        return ok({"analysis": text, "ticker": ticker})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Lỗi gọi AI: {e}")
 
 
 @app.post("/api/analyze-claude")
@@ -1781,25 +1790,30 @@ async def analyze_claude(request: Request):
     if not api_key:
         raise HTTPException(500, "Chưa set ANTHROPIC_API_KEY. Chạy: export ANTHROPIC_API_KEY=sk-ant-...")
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        res = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 1500,
-                "system": body.get("system", "") + "\n\nQUAN TRỌNG: JSON ngắn gọn. Mỗi value tối đa 40 ký tự. risks/catalysts tối đa 2 items.",
-                "messages": body.get("messages", []),
-            },
-        )
-    data = res.json()
-    if not res.is_success:
-        raise HTTPException(res.status_code, data.get("error", {}).get("message", "Lỗi Claude API"))
-    return ok(data)
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 1500,
+                    "system": body.get("system", "") + "\n\nQUAN TRỌNG: JSON ngắn gọn. Mỗi value tối đa 40 ký tự. risks/catalysts tối đa 2 items.",
+                    "messages": body.get("messages", []),
+                },
+            )
+        data = res.json()
+        if not res.is_success:
+            raise HTTPException(res.status_code, data.get("error", {}).get("message", "Lỗi Claude API"))
+        return ok(data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Lỗi gọi Claude API: {e}")
 
 
 @app.get("/api/ai-picks")
