@@ -2397,6 +2397,8 @@ const ACTION_CONFIG = {
   TRÁNH: { bg: 'var(--red-bg)',    fg: 'var(--red)',     icon: '🔴' },
 };
 
+let _radarLoadingCount = 0;
+
 async function triggerRadar() {
   const btn = document.getElementById('btnRadar');
   const container = document.getElementById('radarContainer');
@@ -2409,18 +2411,31 @@ async function triggerRadar() {
     if (!r.ok) { const txt = await r.text(); throw new Error(`Server ${r.status}: ${txt.slice(0,80)}`); }
     const d = await r.json();
 
-    // Đang build cache lần đầu → hiện thông báo và poll lại
+    // Cache chưa có → chỉ retry tối đa 3 lần rồi dừng
     if (d.loading) {
-      container.innerHTML = `<div class="empty" style="padding:24px;text-align:center">
-        <div style="font-size:1.4rem;margin-bottom:8px">⏳</div>
-        <div style="font-weight:600;margin-bottom:4px">Đang khởi tạo dữ liệu...</div>
-        <div style="font-size:.8rem;color:var(--text3)">${d.message||'Vui lòng chờ ~60 giây'}</div>
-      </div>`;
-      container.style.display = 'block';
+      _radarLoadingCount++;
       btn.disabled = false; btn.innerHTML = '🔍 Scan';
-      setTimeout(() => triggerRadar(), 8000);
+      if (_radarLoadingCount <= 3) {
+        container.innerHTML = `<div class="empty" style="padding:24px;text-align:center">
+          <div style="font-size:1.4rem;margin-bottom:8px">⏳</div>
+          <div style="font-weight:600;margin-bottom:4px">Đang khởi tạo dữ liệu... (${_radarLoadingCount}/3)</div>
+          <div style="font-size:.8rem;color:var(--text3)">Thử lại sau ${10*_radarLoadingCount}s</div>
+        </div>`;
+        container.style.display = 'block';
+        setTimeout(() => triggerRadar(), 10000 * _radarLoadingCount);
+      } else {
+        _radarLoadingCount = 0;
+        container.innerHTML = `<div class="empty" style="padding:24px;text-align:center">
+          <div style="font-size:1.4rem;margin-bottom:8px">⚠️</div>
+          <div style="font-weight:600;margin-bottom:8px">Dữ liệu chưa sẵn sàng</div>
+          <div style="font-size:.8rem;color:var(--text3);margin-bottom:12px">Server đang build dữ liệu nền.<br>Thử lại sau vài phút.</div>
+          <button class="btn btn-primary" onclick="_radarLoadingCount=0;triggerRadar()">🔄 Thử lại</button>
+        </div>`;
+        container.style.display = 'block';
+      }
       return;
     }
+    _radarLoadingCount = 0;
 
     const results = d.results || [];
     if (!results.length) {

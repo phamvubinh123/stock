@@ -2443,6 +2443,23 @@ def compute_technical_sync(ticker: str, period: int = 90) -> dict:
 
 _radar_building = False  # flag tránh build đồng thời
 
+@app.post("/api/radar/rebuild")
+async def rebuild_radar_cache(request: Request):
+    """Force rebuild VN30 radar cache."""
+    global _radar_building
+    _ = get_username(request)  # auth check
+    if _radar_building:
+        return ok({"status": "already_building"})
+    _radar_building = True
+    async def _bg():
+        global _radar_building
+        try:
+            await _build_vn30_cache()
+        finally:
+            _radar_building = False
+    asyncio.create_task(_bg())
+    return ok({"status": "started"})
+
 @app.get("/api/radar")
 async def get_radar(request: Request):
     """Đọc từ cache. Nếu chưa có cache → trigger build background, trả loading."""
@@ -2508,8 +2525,9 @@ async def get_radar(request: Request):
                     _radar_building = False
             asyncio.create_task(_bg_build())
 
-        return ok({"results": [], "loading": True,
-                   "message": "Đang build dữ liệu lần đầu (~60s), vui lòng thử lại sau...",
+        building_msg = "Đang build dữ liệu lần đầu, vui lòng thử lại sau 30-60 giây..."
+        return ok({"results": [], "loading": True, "building": _radar_building,
+                   "message": building_msg,
                    "updated_at": datetime.datetime.now().isoformat()})
     except Exception as e:
         log.error(f"Radar endpoint error: {e}", exc_info=True)
