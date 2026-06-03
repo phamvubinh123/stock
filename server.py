@@ -2390,35 +2390,39 @@ def compute_technical_sync(ticker: str, period: int = 90) -> dict:
 @app.get("/api/radar")
 async def get_radar(request: Request):
     """Trả về watchlist với điểm tổng hợp cơ bản + kỹ thuật."""
-    u = get_username(request)
-    watchlist = load_watchlist(u)
-    if not watchlist:
-        return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
+    try:
+        u = get_username(request)
+        watchlist = load_watchlist(u)
+        if not watchlist:
+            return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
 
-    loop = asyncio.get_running_loop()
-    sem  = asyncio.Semaphore(3)
+        loop = asyncio.get_running_loop()
+        sem  = asyncio.Semaphore(3)
 
-    async def _process(ticker: str):
-        async with sem:
-            try:
-                scan_r  = await loop.run_in_executor(None, scan_one_ticker, ticker)
-                ta_data = await loop.run_in_executor(None, compute_technical_sync, ticker)
-                signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
-                return {
-                    "ticker":         ticker,
-                    "signal":         signal,
-                    "buffett_score":  scan_r.get("score", 0),
-                    "price":          (ta_data.get("latest") or {}).get("close"),
-                    "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                    "key_metrics":    scan_r.get("key_metrics", {}),
-                }
-            except Exception as e:
-                log.warning(f"Radar {ticker}: {e}")
-                return {"ticker": ticker, "signal": {"combined":0,"action":"TRÁNH","color":"red","ichi_label":"—"}, "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
+        async def _process(ticker: str):
+            async with sem:
+                try:
+                    scan_r  = await loop.run_in_executor(None, scan_one_ticker, ticker)
+                    ta_data = await loop.run_in_executor(None, compute_technical_sync, ticker)
+                    signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+                    return {
+                        "ticker":         ticker,
+                        "signal":         signal,
+                        "buffett_score":  scan_r.get("score", 0),
+                        "price":          (ta_data.get("latest") or {}).get("close"),
+                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                        "key_metrics":    scan_r.get("key_metrics", {}),
+                    }
+                except Exception as e:
+                    log.warning(f"Radar {ticker}: {e}")
+                    return {"ticker": ticker, "signal": {"combined":0,"action":"TRÁNH","color":"red","ichi_label":"—"}, "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
 
-    results = list(await asyncio.gather(*[_process(t) for t in watchlist]))
-    results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
-    return ok({"results": results, "updated_at": datetime.datetime.now().isoformat()})
+        results = list(await asyncio.gather(*[_process(t) for t in watchlist]))
+        results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
+        return ok({"results": results, "updated_at": datetime.datetime.now().isoformat()})
+    except Exception as e:
+        log.error(f"Radar endpoint error: {e}", exc_info=True)
+        return ok({"results": [], "error": str(e), "updated_at": datetime.datetime.now().isoformat()})
 
 
 # ROUTES — SO SÁNH NGÀNH (Phase 4.3)

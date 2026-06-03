@@ -494,7 +494,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     <!-- 4 MODULE CHÍNH -->
     <button class="nav-item active" data-page="daily" onclick="showPage('daily')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      🔍 Radar
+      🔍 Scan
     </button>
     <button class="nav-item" data-page="buffett" onclick="showPage('buffett')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -569,7 +569,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
               </div>
             </div>
             <div style="display:flex;gap:8px">
-              <button class="btn btn-primary" id="btnRadar" onclick="triggerRadar()" title="Radar — điểm tổng hợp cơ bản + kỹ thuật">🔍 Radar</button>
+              <button class="btn btn-primary" id="btnRadar" onclick="triggerRadar()" title="Radar — điểm tổng hợp cơ bản + kỹ thuật">🔍 Scan</button>
             </div>
           </div>
           <div class="summary-grid">
@@ -583,7 +583,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
         <span id="sumChange" style="display:none"></span>
         <span id="wlCount" style="display:none"></span>
         <div id="aiCommentary" class="ai-box" style="display:none"></div>
-        <div id="picksContainer"><div class="empty">Nhấn <strong>🔍 Radar</strong> để phân tích watchlist</div></div>
+        <div id="picksContainer"><div class="empty">Nhấn <strong>🔍 Scan</strong> để phân tích watchlist</div></div>
         <div id="radarContainer" style="display:none"></div>
       </div>
 
@@ -1430,7 +1430,7 @@ async function loadDailyPicks() {
       updateSummary({});
       container.innerHTML = `<div class="data-table"><div class="table-head"><span>Mã trong Watchlist</span></div>` +
         watchlist.map(t => `<div class="table-row" onclick="openInBuffett('${t}')"><div><div class="sym">${t}</div></div></div>`).join('') + `</div>` +
-        `<div class="empty" style="color:var(--purple);font-weight:500;margin-top:8px">📊 Nhấn <strong>🔍 Radar</strong> để cập nhật</div>`;
+        `<div class="empty" style="color:var(--purple);font-weight:500;margin-top:8px">📊 Nhấn <strong>🔍 Scan</strong> để cập nhật</div>`;
     }
   } catch(e) { container.innerHTML = `<div class="empty" style="color:var(--red)">Lỗi: ${e.message}</div>`; }
 }
@@ -2349,7 +2349,7 @@ async function triggerRadar() {
     const updatedAt = d.updated_at ? d.updated_at.slice(0,16).replace('T',' ') : '';
     let html = `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="card-title" style="margin:0">🔍 Radar <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updatedAt}</span></div>
+        <div class="card-title" style="margin:0">🔍 Scan <span style="font-size:.72rem;color:var(--muted);font-weight:400">— cập nhật ${updatedAt}</span></div>
         <button class="btn" style="font-size:.72rem" onclick="triggerRadar()">↻ Quét lại</button>
       </div>
       <div style="overflow-x:auto">
@@ -2396,7 +2396,7 @@ async function triggerRadar() {
     container.style.display = 'block';
     console.error(e);
   } finally {
-    btn.disabled = false; btn.innerHTML = '🔍 Radar';
+    btn.disabled = false; btn.innerHTML = '🔍 Scan';
   }
 }
 
