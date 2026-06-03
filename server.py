@@ -2441,96 +2441,64 @@ def compute_technical_sync(ticker: str, period: int = 90) -> dict:
         log.warning(f"compute_technical_sync {ticker}: {e}")
         return {}
 
-_radar_building = False  # flag tránh build đồng thời
-
-@app.post("/api/radar/rebuild")
-async def rebuild_radar_cache(request: Request):
-    """Force rebuild VN30 radar cache."""
-    global _radar_building
-    _ = get_username(request)  # auth check
-    if _radar_building:
-        return ok({"status": "already_building"})
-    _radar_building = True
-    async def _bg():
-        global _radar_building
-        try:
-            await _build_vn30_cache()
-        finally:
-            _radar_building = False
-    asyncio.create_task(_bg())
-    return ok({"status": "started"})
-
 @app.get("/api/radar")
 async def get_radar(request: Request):
-    """Đọc từ cache. Nếu chưa có cache → trigger build background, trả loading."""
-    global _radar_building
+    """Scan watchlist với timeout ngắn — luôn trả kết quả, không bao giờ trả loading."""
     try:
         u = get_username(request)
         watchlist = load_watchlist(u)
+        if not watchlist:
+            return ok({"results": [], "updated_at": datetime.datetime.now().isoformat()})
 
-        # Load cache
+        # Đọc cache cho các mã VN30
+        cache_map = {}
+        updated_at = datetime.datetime.now().isoformat()
         if os.path.exists(VN30_RADAR_CACHE):
             try:
                 with open(VN30_RADAR_CACHE) as f:
                     cache = json.load(f)
                 cache_map = {r["ticker"]: r for r in cache.get("results", [])}
-                updated_at = cache.get("updated_at", "")
-
-                # Tách mã trong cache vs mã cần scan thêm (mã cá nhân ngoài VN30)
-                cached_results = []
-                extra_tickers  = []
-                for t in watchlist:
-                    if t in cache_map:
-                        cached_results.append(cache_map[t])
-                    else:
-                        extra_tickers.append(t)
-
-                # Scan tối đa 3 mã extra (tránh timeout)
-                if extra_tickers:
-                    loop = asyncio.get_running_loop()
-                    sem  = asyncio.Semaphore(2)
-                    async def _scan_extra(ticker):
-                        async with sem:
-                            try:
-                                scan_r  = await asyncio.wait_for(
-                                    loop.run_in_executor(None, scan_one_ticker, ticker), timeout=20)
-                                ta_data = await asyncio.wait_for(
-                                    loop.run_in_executor(None, compute_technical_sync, ticker), timeout=20)
-                                signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
-                                return {"ticker": ticker, "signal": signal,
-                                        "buffett_score": scan_r.get("score", 0),
-                                        "price": (ta_data.get("latest") or {}).get("close"),
-                                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                                        "key_metrics": scan_r.get("key_metrics", {})}
-                            except Exception as e:
-                                log.warning(f"Extra scan {ticker}: {e}")
-                                return {"ticker": ticker, "signal": {"combined":0,"action":"—","color":"gray","ichi_label":"—","ta_score":0,"fundamental":0},
-                                        "buffett_score":0, "price":None, "volume_warning":None, "key_metrics":{}}
-                    extra_results = list(await asyncio.gather(*[_scan_extra(t) for t in extra_tickers[:3]]))
-                    cached_results = extra_results + cached_results
-
-                cached_results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
-                return ok({"results": cached_results, "updated_at": updated_at, "from_cache": True})
+                updated_at = cache.get("updated_at", updated_at)
             except Exception as e:
-                log.warning(f"Cache read error: {e}")
+                log.warning(f"Cache read: {e}")
 
-        # Chưa có cache → trigger build background, báo client chờ
-        if not _radar_building:
-            _radar_building = True
-            async def _bg_build():
-                global _radar_building
+        loop = asyncio.get_running_loop()
+        sem  = asyncio.Semaphore(3)
+
+        async def _process(ticker: str):
+            # Dùng cache nếu có
+            if ticker in cache_map:
+                return cache_map[ticker]
+            # Scan realtime với timeout 12s/bước
+            async with sem:
                 try:
-                    await _build_vn30_cache()
-                finally:
-                    _radar_building = False
-            asyncio.create_task(_bg_build())
+                    scan_r = await asyncio.wait_for(
+                        loop.run_in_executor(None, scan_one_ticker, ticker), timeout=12)
+                    ta_data = await asyncio.wait_for(
+                        loop.run_in_executor(None, compute_technical_sync, ticker), timeout=12)
+                    signal = calc_combined_signal(scan_r.get("score", 0), ta_data)
+                    return {
+                        "ticker": ticker, "signal": signal,
+                        "buffett_score": scan_r.get("score", 0),
+                        "price": (ta_data.get("latest") or {}).get("close"),
+                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                        "key_metrics": scan_r.get("key_metrics", {}),
+                    }
+                except Exception as e:
+                    log.warning(f"Radar {ticker}: {e}")
+                    return {
+                        "ticker": ticker,
+                        "signal": {"combined": 0, "action": "—", "color": "gray",
+                                   "ichi_label": "Lỗi", "ta_score": 0, "fundamental": 0},
+                        "buffett_score": 0, "price": None,
+                        "volume_warning": None, "key_metrics": {},
+                    }
 
-        building_msg = "Đang build dữ liệu lần đầu, vui lòng thử lại sau 30-60 giây..."
-        return ok({"results": [], "loading": True, "building": _radar_building,
-                   "message": building_msg,
-                   "updated_at": datetime.datetime.now().isoformat()})
+        results = list(await asyncio.gather(*[_process(t) for t in watchlist]))
+        results.sort(key=lambda x: x["signal"]["combined"], reverse=True)
+        return ok({"results": results, "updated_at": updated_at, "from_cache": bool(cache_map)})
     except Exception as e:
-        log.error(f"Radar endpoint error: {e}", exc_info=True)
+        log.error(f"Radar error: {e}", exc_info=True)
         return ok({"results": [], "error": str(e), "updated_at": datetime.datetime.now().isoformat()})
 
 
