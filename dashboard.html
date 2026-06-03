@@ -372,6 +372,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .dca-child { font-size:.76rem; color:var(--text2); padding:3px 0; display:flex; gap:12px; }
 .dca-child-actions { display:flex; gap:6px; margin-left:8px; }
 .dca-form-input { width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:.82rem; }
+#maCP::placeholder { text-transform: none; }
 </style>
 </head>
 <body>
@@ -517,7 +518,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
         <div class="card">
           <div class="card-title">Kéo dữ liệu BCTC</div>
           <div class="fetch-row">
-            <div class="fg" style="flex:0 0 110px">
+            <div class="fg" style="flex:0 0 160px">
               <label>Mã CP</label>
               <input type="text" id="maCP" placeholder="Nhập mã CP" maxlength="10" style="text-transform:uppercase"
                 onkeydown="if(event.key==='Enter')fetchData()">
