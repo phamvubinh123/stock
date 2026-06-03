@@ -1865,8 +1865,8 @@ async function fetchTA() {
 
     // Signals
     const sigColors={bull:{bg:'var(--green-bg)',fg:'var(--green)',icon:'▲'},bear:{bg:'var(--red-bg)',fg:'var(--red)',icon:'▼'},neutral:{bg:'#f5f5f5',fg:'var(--muted)',icon:'●'}};
-    document.getElementById('taSignals').innerHTML=d.signals.length
-      ?d.signals.map(s=>{
+    document.getElementById('taSignals').innerHTML=(d.signals||[]).length
+      ?(d.signals||[]).map(s=>{
         const c=sigColors[s.type]||sigColors.neutral;
         return `<div style="padding:8px 12px;background:${c.bg};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${c.fg};display:flex;gap:8px;align-items:center"><span>${c.icon}</span><span>${s.text||s}</span></div>`;
       }).join('')
@@ -2458,11 +2458,11 @@ async function triggerRadar() {
         <td style="text-align:right;padding:9px 4px;color:${scoreColor(r.buffett_score)}">${r.buffett_score}/14</td>
         <td style="text-align:right;padding:9px 4px">${sig.ta_score || 0}/100</td>
         <td style="text-align:right;padding:9px 4px;font-size:.78rem;color:var(--muted)">${sig.ichi_label || '—'}</td>
-        <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1)+'k' : '—'}</td>
+        <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1) : '—'}</td>
         <td style="text-align:center;padding:9px 6px">
           <span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:.75rem;font-weight:700;
             background:${ac.bg};color:${ac.fg};cursor:pointer" onclick="openInBuffett('${r.ticker}')">${sig.action}</span>
-          <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈</button>
+          <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Phân tích</button>
         </td>
       </tr>`;
     });
