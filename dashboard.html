@@ -143,6 +143,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .tf-btn { padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text2); font-size:.75rem; font-weight:500; cursor:pointer; transition:all .15s; }
 .tf-btn.active { background:var(--purple); color:#fff; border-color:var(--purple); }
 .tf-btn:hover:not(.active) { background:var(--purple-light); color:var(--purple); }
+@media (max-width: 640px) { .deep-grid { grid-template-columns: 1fr !important; } }
 .btn-buy { background: var(--green); color: #fff; border-color: var(--green); flex: 1; padding: 12px; font-weight: 700; border-radius: 8px; }
 .btn-sm { padding: 5px 10px; font-size: .72rem; }
 .btn-danger { border-color: var(--red); color: var(--red); }
@@ -599,6 +600,69 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
           <button class="btn-buy" id="btnAnalyze" onclick="analyze()" disabled style="opacity:.45;cursor:not-allowed">Phân tích</button>
         </div>
         <div id="results">
+
+          <!-- ── DEEP DIVE PANEL: 2 cột cơ bản + kỹ thuật ── -->
+          <div class="card" id="deepDiveCard" style="display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="deep-grid">
+
+              <!-- CỘT TRÁI: Cơ bản tóm tắt -->
+              <div>
+                <div style="font-size:.7rem;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📊 Cơ Bản</div>
+                <div id="ddFundamental" class="stat-grid" style="grid-template-columns:1fr 1fr"></div>
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-primary" style="font-size:.75rem" onclick="addToPortfolioModal()">💼 Thêm Danh Mục</button>
+                  <button class="btn" style="font-size:.75rem" onclick="addCurrentToWl()">+ Watchlist</button>
+                </div>
+              </div>
+
+              <!-- CỘT PHẢI: Kỹ thuật + TradingView -->
+              <div>
+                <div style="font-size:.7rem;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📈 Kỹ Thuật</div>
+                <div id="ddTechnical" class="stat-grid" style="grid-template-columns:1fr 1fr;margin-bottom:10px"></div>
+                <div id="tv-chart-container" style="height:280px;border-radius:8px;overflow:hidden;background:#f8f9fa"></div>
+              </div>
+            </div>
+
+            <!-- AI Verdict -->
+            <div id="ddAIVerdict" style="margin-top:16px;display:none">
+              <div style="height:1px;background:var(--border);margin-bottom:14px"></div>
+              <div style="font-size:.7rem;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🤖 AI Verdict</div>
+              <div id="ddVerdictBadge" style="margin-bottom:10px"></div>
+              <div id="ddVerdictText" style="font-size:.83rem;line-height:1.6;color:var(--text2)"></div>
+            </div>
+            <div id="ddAILoading" style="display:none;padding:14px 0;text-align:center;font-size:.82rem;color:var(--muted)">
+              <span class="spinner"></span> AI đang phân tích...
+            </div>
+          </div>
+
+          <!-- Modal thêm vào danh mục -->
+          <div id="portfolioModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center">
+            <div style="background:#fff;border-radius:16px;padding:24px;width:min(360px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.2)">
+              <div style="font-weight:700;font-size:1rem;margin-bottom:16px">💼 Thêm vào Danh Mục</div>
+              <div class="fg" style="margin-bottom:10px">
+                <label>Số CP</label>
+                <input type="number" id="modalShares" placeholder="1000" min="1">
+              </div>
+              <div class="fg" style="margin-bottom:10px">
+                <label>Giá vốn (k) <span id="modalPriceHint" style="color:var(--muted);font-size:.72rem"></span></label>
+                <input type="number" id="modalAvgPrice" placeholder="Auto từ giá HT" step="0.1">
+              </div>
+              <div class="fg" style="margin-bottom:10px">
+                <label>Mục tiêu (k)</label>
+                <input type="number" id="modalTP" placeholder="Tùy chọn" step="0.1">
+              </div>
+              <div class="fg" style="margin-bottom:16px">
+                <label>Cắt lỗ (k)</label>
+                <input type="number" id="modalSL" placeholder="Tùy chọn" step="0.1">
+              </div>
+              <div style="display:flex;gap:10px">
+                <button class="btn btn-primary" style="flex:1" onclick="confirmAddPortfolio()">Thêm</button>
+                <button class="btn" onclick="closePortfolioModal()">Hủy</button>
+              </div>
+              <div id="modalMsg" style="font-size:.78rem;margin-top:8px;min-height:18px;text-align:center"></div>
+            </div>
+          </div>
+
           <div class="score-hero">
             <div class="big-score" id="sNum">0</div>
             <div>
@@ -1549,9 +1613,11 @@ function analyze() {
 
   document.getElementById('results').classList.add('show');
   document.getElementById('results').scrollIntoView({behavior:'smooth'});
-  // Load so sánh ngành
   const curTicker = document.getElementById('maCP')?.value?.trim()?.toUpperCase();
-  if (curTicker) loadSectorCompare(curTicker);
+  if (curTicker) {
+    loadSectorCompare(curTicker);
+    loadDeepDive(curTicker);
+  }
   const colorScore=scoreColor(score);
   const sEl=document.getElementById('sNum');
   sEl.textContent=score; sEl.style.color=colorScore;
@@ -1601,6 +1667,16 @@ function analyze() {
   const mos=(!isNaN(iv)&&iv>0)?(iv-giaHT)/iv*100:0;
   document.getElementById('mosSect').innerHTML=(!isNaN(iv)&&iv>0)?`<div style="font-size:.65rem;color:var(--text3)">Margin of Safety: ${mos>0?'+':''}${fmtPct(mos)}</div><div class="mos-bar"><div class="mos-fill" style="width:${Math.min(100,Math.max(0,mos))}%;background:${mos>=30?'var(--green)':mos>=0?'var(--yellow)':'var(--red)'}"></div></div>`:'';
   document.getElementById('verdictBox').innerHTML=`<div style="padding:14px;background:#F8F9FB;border-radius:8px;border-left:3px solid ${colorScore}"><div style="font-weight:700;color:${colorScore};margin-bottom:6px">${vv.t} — ${score}/14</div><p style="font-size:.82rem;color:var(--text2);line-height:1.6"><strong>${ten} (${ma})</strong></p></div><p class="note">Không phải lời khuyên đầu tư chính thức.</p>`;
+
+  // Lưu lại để Deep Dive dùng
+  window._lastScore = {
+    score, dcf: isNaN(iv)?null:Math.round(iv*10)/10,
+    mos: (!isNaN(iv)&&iv>0)?Math.round((iv-giaHT)/iv*1000)/10:null,
+    key_metrics: {
+      roe: Math.round(roe[N]*1000)/10, pe: peL>0?Math.round(peL*10)/10:null,
+      gross_margin: Math.round(gm[N]*1000)/10,
+    }
+  };
 }
 
 // ═══════════════════════════════════════════
@@ -2001,6 +2077,7 @@ function renderPortfolioPositions(positions) {
           <button class="btn-row" onclick="editPosition('${p.id}')">✏️</button>
           <button class="btn-row" onclick="openInBuffett('${p.ticker}')">📊</button>
           <button class="btn-row" onclick="openInTechnical('${p.ticker}')">📈</button>
+          <button class="btn-row" title="Dùng trong Calculator" onclick="fillCalcFromPortfolio('${p.ticker}',${p.shares},${p.avg_price})">🧮</button>
           <button class="btn-row" style="color:var(--red)" onclick="deletePosition('${p.id}','${p.ticker}')">✕</button>
         </div>
       </div>
@@ -2311,6 +2388,190 @@ async function triggerRadar() {
   } finally {
     btn.disabled = false; btn.innerHTML = '🔍 Radar';
   }
+}
+
+// ═══════════════════════════════════════════
+// DEEP DIVE — Bước 4+6 (layout 2 cột + AI)
+// ═══════════════════════════════════════════
+function loadTVChart(ticker, exchange) {
+  const ex  = exchange || 'HOSE';
+  const sym = `${ex}:${ticker}`;
+  const el  = document.getElementById('tv-chart-container');
+  if (!el) return;
+  el.innerHTML = '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tradingview-widget-container';
+  wrapper.style.cssText = 'height:100%;width:100%';
+  const div = document.createElement('div');
+  div.id = 'tv-widget-' + ticker;
+  div.style.cssText = 'height:100%;width:100%';
+  wrapper.appendChild(div);
+  el.appendChild(wrapper);
+  const s = document.createElement('script');
+  s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  s.async = true;
+  s.innerHTML = JSON.stringify({
+    autosize: true, height: 280,
+    symbol: sym, interval: 'D',
+    timezone: 'Asia/Ho_Chi_Minh', theme: 'light', style: '1',
+    locale: 'vi_VN', enable_publishing: false,
+    hide_top_toolbar: false, hide_legend: true,
+    studies: ['STD;MACD','STD;RSI'],
+    container_id: div.id,
+  });
+  wrapper.appendChild(s);
+}
+
+async function loadDeepDive(ticker) {
+  const card = document.getElementById('deepDiveCard');
+  card.style.display = 'block';
+
+  // 1. Lấy technical data
+  let taData = {};
+  try {
+    const r = await fetch(`/api/technical/${ticker}?period=90`, { headers: {'X-Token': authToken} });
+    taData = (await r.json()) || {};
+  } catch(e) {}
+
+  // 2. Render fundamental summary từ window._lastScore (được set khi analyze())
+  const sc = window._lastScore || {};
+  const km = sc.key_metrics || {};
+  document.getElementById('ddFundamental').innerHTML = [
+    {v: (sc.score||0)+'/14', l:'Buffett Score', cls: sc.score>=9?'cg':sc.score>=6?'cy':'cr'},
+    {v: km.pe>0 ? fmt(km.pe,1)+'x' : '—', l:'P/E'},
+    {v: km.roe!=null ? fmt(km.roe,1)+'%' : '—', l:'ROE', cls: km.roe>=15?'cg':''},
+    {v: km.gross_margin!=null ? fmt(km.gross_margin,1)+'%':'—', l:'Biên gộp'},
+    {v: sc.dcf ? fmt(sc.dcf,1)+'k':'—', l:'DCF'},
+    {v: sc.mos!=null ? fmt(sc.mos,1)+'%':'—', l:'MOS', cls: sc.mos>0?'cg':'cr'},
+  ].map(s=>`<div class="stat"><div class="stat-val ${s.cls||''}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+
+  // 3. Render technical summary
+  const lat  = taData.latest || {};
+  const ichi = taData.ichimoku || {};
+  const vol  = taData.volume_signal || {};
+  const ichiClr = ichi.signal==='bullish'?'cg':ichi.signal==='bearish'?'cr':'cy';
+  document.getElementById('ddTechnical').innerHTML = [
+    {v: lat.close ? fmt(lat.close,1)+'k':'—', l:'Giá'},
+    {v: lat.rsi   ? fmt(lat.rsi,1):'—', l:'RSI', cls:lat.rsi<30?'cg':lat.rsi>70?'cr':''},
+    {v: ichi.position||'—', l:'Ichimoku', cls: ichiClr},
+    {v: vol.vol_ratio ? fmt(vol.vol_ratio,1)+'x TB20':'—', l:'Volume', cls: vol.signal==='bullish'?'cg':vol.signal==='bearish'?'cr':''},
+  ].map(s=>`<div class="stat"><div class="stat-val ${s.cls||''}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+
+  // 4. TradingView
+  loadTVChart(ticker, taData.exchange);
+
+  // 5. Volume warning nổi bật
+  if (vol.warning) {
+    const warnEl = document.createElement('div');
+    warnEl.style.cssText = `padding:10px 14px;border-radius:8px;font-weight:600;font-size:.83rem;
+      background:${vol.signal==='bearish'?'var(--red-bg)':'var(--green-bg)'};
+      color:${vol.signal==='bearish'?'var(--red)':'var(--green)'};
+      border:1px solid currentColor;margin-bottom:12px`;
+    warnEl.textContent = vol.warning;
+    document.getElementById('ddTechnical').insertAdjacentElement('afterend', warnEl);
+  }
+
+  // 6. Gọi AI deep dive
+  document.getElementById('ddAILoading').style.display = 'block';
+  document.getElementById('ddAIVerdict').style.display  = 'none';
+  try {
+    const r2 = await fetch('/api/analyze-deep', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-Token':authToken},
+      body: JSON.stringify({
+        ticker,
+        fundamental: { score: sc.score, roe: km.roe, pe: km.pe,
+          gross_margin: km.gross_margin, dcf: sc.dcf, mos: sc.mos },
+        technical: taData,
+      })
+    });
+    const d2 = await r2.json();
+    const text = d2.analysis || '';
+    if (text) {
+      const firstLine = text.split('\n')[0].toUpperCase();
+      const verdict = firstLine.includes('MUA') ? 'CÓ THỂ MUA'
+                    : firstLine.includes('TRÁNH') ? 'TRÁNH XA' : 'CHỜ THÊM';
+      const vColor = verdict==='CÓ THỂ MUA' ? 'var(--green)'
+                   : verdict==='TRÁNH XA' ? 'var(--red)' : '#92400e';
+      const vIcon  = verdict==='CÓ THỂ MUA' ? '📈' : verdict==='TRÁNH XA' ? '📉' : '⚖️';
+      document.getElementById('ddVerdictBadge').innerHTML =
+        `<span style="display:inline-flex;align-items:center;gap:8px;padding:8px 20px;
+          border-radius:20px;background:${vColor}20;border:1px solid ${vColor};
+          font-weight:700;font-size:.95rem;color:${vColor}">
+          ${vIcon} Tín hiệu: ${verdict}
+        </span>`;
+      document.getElementById('ddVerdictText').innerHTML = text.replace(/\n/g,'<br>');
+      document.getElementById('ddAIVerdict').style.display = 'block';
+    }
+  } catch(e) { console.error('DeepDive AI error', e); }
+  finally { document.getElementById('ddAILoading').style.display = 'none'; }
+}
+
+// Modal thêm vào danh mục từ Phân Tích
+function addToPortfolioModal() {
+  const ticker = document.getElementById('maCP')?.value?.trim()?.toUpperCase();
+  if (!ticker) { alert('Chưa có mã CP!'); return; }
+  const price  = parseFloat(document.getElementById('giaHT')?.value) || 0;
+  document.getElementById('modalPriceHint').textContent = price ? `(giá HT: ${fmt(price,1)}k)` : '';
+  document.getElementById('modalAvgPrice').value = price || '';
+  document.getElementById('modalShares').value   = '';
+  document.getElementById('modalTP').value = '';
+  document.getElementById('modalSL').value = '';
+  document.getElementById('modalMsg').textContent = '';
+  const modal = document.getElementById('portfolioModal');
+  modal.style.display = 'flex';
+  modal._ticker = ticker;
+}
+
+function closePortfolioModal() {
+  document.getElementById('portfolioModal').style.display = 'none';
+}
+
+async function confirmAddPortfolio() {
+  const modal     = document.getElementById('portfolioModal');
+  const ticker    = modal._ticker;
+  const shares    = parseFloat(document.getElementById('modalShares').value);
+  const avg_price = parseFloat(document.getElementById('modalAvgPrice').value);
+  const tp        = document.getElementById('modalTP').value;
+  const sl        = document.getElementById('modalSL').value;
+  const msg       = document.getElementById('modalMsg');
+  if (!shares || !avg_price) { msg.style.color='var(--red)'; msg.textContent='Nhập số CP và giá vốn!'; return; }
+  try {
+    const r = await fetch('/api/portfolio', {
+      method:'POST', headers:{'Content-Type':'application/json','X-Token':authToken},
+      body: JSON.stringify({ ticker, shares, avg_price,
+        target_price: tp ? parseFloat(tp) : null,
+        stop_loss:    sl ? parseFloat(sl) : null })
+    });
+    if (!r.ok) throw new Error((await r.json()).detail||'Lỗi');
+    msg.style.color='var(--green)'; msg.textContent=`✓ Đã thêm ${ticker} vào danh mục!`;
+    setTimeout(closePortfolioModal, 1500);
+    loadPortfolio();
+  } catch(e) { msg.style.color='var(--red)'; msg.textContent=e.message; }
+}
+
+function addCurrentToWl() {
+  const ticker = document.getElementById('maCP')?.value?.trim()?.toUpperCase();
+  if (!ticker) return;
+  addToWl(ticker);
+}
+
+// ═══════════════════════════════════════════
+// BƯỚC 5: Calculator quick fill từ Danh Mục
+// ═══════════════════════════════════════════
+function fillCalcFromPortfolio(ticker, shares, avgPrice) {
+  // Chuyển sang tab Calculator + điền thông tin
+  showPage('calculator');
+  showCalcTab('avg', document.querySelector('#subNavCalc .sub-tab'));
+  setTimeout(() => {
+    const tickerEl = document.getElementById('avgTicker') || document.querySelector('[id*="Ticker"]');
+    if (tickerEl) tickerEl.value = ticker;
+    const sharesEl = document.getElementById('avgSharesHeld');
+    if (sharesEl) sharesEl.value = shares;
+    const priceEl  = document.getElementById('avgPriceHeld');
+    if (priceEl)  priceEl.value  = avgPrice;
+    showToast(`✓ Đã điền ${ticker} từ danh mục`);
+  }, 100);
 }
 
 // ═══════════════════════════════════════════

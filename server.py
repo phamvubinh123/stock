@@ -1313,6 +1313,114 @@ def get_history(
         raise HTTPException(500, f"Lỗi: {e}")
 
 
+HNX_TICKERS = {"SHB","ACB","PVS","NTP","VCS","CEO","HUT","PVI","BVS","MBS",
+               "SHS","VDS","HBS","PGC","HGM","NRC","BII","IDJ","KLF","BAX"}
+
+def detect_exchange(ticker: str) -> str:
+    return "HNX" if ticker.upper() in HNX_TICKERS else "HOSE"
+
+def calc_ichimoku(df) -> dict:
+    h, l, c = df["high"].astype(float), df["low"].astype(float), df["close"].astype(float)
+    tenkan  = (h.rolling(9).max()  + l.rolling(9).min())  / 2
+    kijun   = (h.rolling(26).max() + l.rolling(26).min()) / 2
+    sa      = ((tenkan + kijun) / 2).shift(26)
+    sb      = ((h.rolling(52).max() + l.rolling(52).min()) / 2).shift(26)
+    price   = float(c.iloc[-1])
+    sa_v    = safe_float(sa.iloc[-1]) or 0
+    sb_v    = safe_float(sb.iloc[-1]) or 0
+    cloud_top    = max(sa_v, sb_v)
+    cloud_bottom = min(sa_v, sb_v)
+    if price > cloud_top:        pos, signal = "TRÊN MÂY",  "bullish"
+    elif price < cloud_bottom:   pos, signal = "DƯỚI MÂY", "bearish"
+    else:                        pos, signal = "TRONG MÂY","neutral"
+    tk_cross = None
+    if len(tenkan) > 1 and len(kijun) > 1:
+        if tenkan.iloc[-2] < kijun.iloc[-2] and tenkan.iloc[-1] > kijun.iloc[-1]:
+            tk_cross = "golden_cross"
+        elif tenkan.iloc[-2] > kijun.iloc[-2] and tenkan.iloc[-1] < kijun.iloc[-1]:
+            tk_cross = "dead_cross"
+    return {"tenkan": round(float(tenkan.iloc[-1]),2), "kijun": round(float(kijun.iloc[-1]),2),
+            "senkou_a": round(sa_v,2), "senkou_b": round(sb_v,2),
+            "cloud_top": round(cloud_top,2), "cloud_bottom": round(cloud_bottom,2),
+            "position": pos, "signal": signal, "tk_cross": tk_cross}
+
+def calc_fibonacci(df, lookback: int = 60) -> dict:
+    recent = df.tail(lookback)
+    high   = float(recent["high"].max())
+    low    = float(recent["low"].min())
+    diff   = high - low
+    price  = float(df["close"].iloc[-1])
+    levels = {
+        "0.0":   round(high, 2),
+        "0.236": round(high - 0.236 * diff, 2),
+        "0.382": round(high - 0.382 * diff, 2),
+        "0.5":   round(high - 0.5   * diff, 2),
+        "0.618": round(high - 0.618 * diff, 2),
+        "0.786": round(high - 0.786 * diff, 2),
+        "1.0":   round(low, 2),
+    }
+    sorted_lvl = sorted(levels.items(), key=lambda x: x[1], reverse=True)
+    zone = None
+    for i in range(len(sorted_lvl)-1):
+        ul, uv = sorted_lvl[i]; ll, lv = sorted_lvl[i+1]
+        if lv <= price <= uv:
+            zone = f"Fib {ll} ({lv:,.1f}) – {ul} ({uv:,.1f})"; break
+    return {"high": high, "low": low, "levels": levels,
+            "current_zone": zone, "lookback_days": lookback}
+
+def detect_candle_patterns(df) -> list:
+    o = df["open"].astype(float)
+    h = df["high"].astype(float)
+    l = df["low"].astype(float)
+    c = df["close"].astype(float)
+    patterns = []
+    for i in [-1, -2, -3]:
+        body   = abs(c.iloc[i] - o.iloc[i])
+        rng    = h.iloc[i] - l.iloc[i]
+        if rng == 0: continue
+        if body / rng < 0.1:
+            patterns.append({"name":"Doji","type":"neutral","meaning":"Thị trường do dự, có thể đảo chiều"})
+        lo_sh = min(o.iloc[i], c.iloc[i]) - l.iloc[i]
+        up_sh = h.iloc[i] - max(o.iloc[i], c.iloc[i])
+        if lo_sh > 2*body and up_sh < body:
+            patterns.append({"name":"Hammer","type":"bullish","meaning":"Tín hiệu đảo chiều tăng sau downtrend"})
+        if up_sh > 2*body and lo_sh < body:
+            patterns.append({"name":"Shooting Star","type":"bearish","meaning":"Tín hiệu đảo chiều giảm sau uptrend"})
+    if len(df) >= 2:
+        if (c.iloc[-2]<o.iloc[-2] and c.iloc[-1]>o.iloc[-1] and
+            o.iloc[-1]<c.iloc[-2] and c.iloc[-1]>o.iloc[-2]):
+            patterns.append({"name":"Bullish Engulfing","type":"bullish","meaning":"Phe mua áp đảo, tín hiệu tăng mạnh"})
+        if (c.iloc[-2]>o.iloc[-2] and c.iloc[-1]<o.iloc[-1] and
+            o.iloc[-1]>c.iloc[-2] and c.iloc[-1]<o.iloc[-2]):
+            patterns.append({"name":"Bearish Engulfing","type":"bearish","meaning":"Phe bán áp đảo, tín hiệu giảm mạnh"})
+    if len(df) >= 3:
+        if (c.iloc[-3]<o.iloc[-3] and
+            abs(c.iloc[-2]-o.iloc[-2])<(h.iloc[-2]-l.iloc[-2])*0.3 and
+            c.iloc[-1]>o.iloc[-1] and c.iloc[-1]>(o.iloc[-3]+c.iloc[-3])/2):
+            patterns.append({"name":"Morning Star","type":"bullish","meaning":"Tín hiệu đảo chiều tăng mạnh, xác nhận đáy"})
+    return patterns[:3]
+
+def calc_volume_signal(df) -> dict:
+    vol_ma20 = float(df["volume"].rolling(20).mean().iloc[-1]) if "volume" in df.columns else 0
+    vol_last = float(df["volume"].iloc[-1]) if "volume" in df.columns else 0
+    vol_ratio = vol_last / vol_ma20 if vol_ma20 > 0 else 1
+    close = df["close"].astype(float)
+    prev = float(close.iloc[-2]) if len(close) > 1 else float(close.iloc[-1])
+    price = float(close.iloc[-1])
+    chg = (price - prev) / prev * 100 if prev else 0
+    is_tran = chg >= 6.5; is_san = chg <= -6.5
+    signal = "neutral"; warning = None
+    if is_tran and vol_ratio > 3:
+        signal = "bearish"; warning = f"⚠️ TRẦN + VOL đột biến {vol_ratio:.1f}x TB20 — nguy cơ xả hàng"
+    elif is_tran and vol_ratio < 1:
+        signal = "bullish"; warning = f"✅ Trần + vol thấp ({vol_ratio:.1f}x TB20) — cung khan, còn room"
+    elif is_san and vol_ratio > 2:
+        signal = "bearish"; warning = f"⚠️ SÀN + VOL lớn {vol_ratio:.1f}x TB20 — hoảng loạn, chưa bắt đáy"
+    return {"vol_last": int(vol_last), "vol_ma20": int(vol_ma20),
+            "vol_ratio": round(vol_ratio,2), "change_pct": round(chg,2),
+            "is_tran": is_tran, "is_san": is_san, "signal": signal, "warning": warning}
+
+
 @app.get("/api/technical/{ticker}")
 def get_technical(ticker: str, period: int = Query(90)):
     try:
@@ -1474,6 +1582,7 @@ def get_technical(ticker: str, period: int = Query(90)):
         cols = ["time","open","high","low","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
         payload = {
             "ticker": ticker, "period": period,
+            "exchange": detect_exchange(ticker),
             "latest": {
                 "time": str(latest.get("time")), "close": price,
                 "rsi": rsi_val, "macd": macd_val, "macd_signal": macd_sig,
@@ -1481,6 +1590,10 @@ def get_technical(ticker: str, period: int = Query(90)):
                 "ma20": safe_float(latest.get("ma20")), "ma50": safe_float(latest.get("ma50")),
                 "bb_upper": safe_float(latest.get("bb_upper")), "bb_lower": safe_float(latest.get("bb_lower")),
             },
+            "ichimoku":       calc_ichimoku(df),
+            "fibonacci":      calc_fibonacci(df),
+            "candle_patterns": detect_candle_patterns(df),
+            "volume_signal":  calc_volume_signal(df),
             "signals": signals,
             "history": df[cols].to_dict(orient="records"),
         }
@@ -1496,6 +1609,102 @@ def get_technical(ticker: str, period: int = Query(90)):
 # ─────────────────────────────────────────────
 # ROUTES — CLAUDE AI ANALYSIS
 # ─────────────────────────────────────────────
+
+STREET_SMART_RULES = """
+=== KINH NGHIỆM THỰC CHIẾN — ÁP DỤNG KHI PHÂN TÍCH ===
+
+[VOLUME + GIÁ]
+- Trần + vol thấp hơn TB20 phiên  → Cung khan, còn room tăng tiếp
+- Trần + vol đột biến (>3x TB20)  → Nguy cơ tay to xả hàng, CẢNH BÁO
+- Sàn + vol lớn                   → Hoảng loạn, chưa nên bắt đáy
+- Sàn + vol thấp                  → Rơi tự do, chờ tín hiệu hồi phục rõ
+
+[HỖ TRỢ / KHÁNG CỰ]
+- Giá đang dưới kháng cự          → Upside bị chặn, chưa nên mua
+- Giá đang trên hỗ trợ            → Downside bị đỡ, chưa nên bán
+- Breakout kháng cự + vol lớn     → Tín hiệu thật, cơ hội vào hàng
+- Thủng hỗ trợ                    → Thoát hàng, không bắt dao rơi
+
+[ICHIMOKU]
+- Giá trên mây + Tenkan > Kijun   → Uptrend xác nhận, giữ/mua
+- Giá dưới mây + Tenkan < Kijun   → Downtrend, tránh xa
+- Giá trong mây                   → Vùng nhiễu, không rõ xu hướng
+- Golden Cross Tenkan/Kijun       → Tín hiệu mua sớm
+- Dead Cross Tenkan/Kijun         → Tín hiệu thoát hàng
+
+[TÂM LÝ ĐÁM ĐÔNG]
+- 3 phiên trần liên tiếp          → FOMO zone, tuyệt đối không đuổi giá
+- RSI > 70 + vol tăng             → Vùng quá mua, dễ điều chỉnh mạnh
+- RSI < 30 + vol giảm dần         → Cạn lực bán, có thể sắp hồi
+- Giá tăng mạnh + vol giảm dần   → Uptrend yếu, cẩn thận đảo chiều
+
+Khi phân tích: CHECK từng nhóm rule, nêu rõ rule nào đang kích hoạt.
+Ưu tiên cảnh báo rủi ro trước, cơ hội sau.
+=== HẾT QUY TẮC ==="""
+
+
+@app.post("/api/analyze-deep")
+async def analyze_deep(request: Request):
+    """Deep dive: gộp cơ bản + kỹ thuật → AI cho verdict rõ ràng (vùng mua, TP, SL, R/R)."""
+    import httpx
+    body   = await request.json()
+    ticker = body.get("ticker","").upper()
+    fundamental = body.get("fundamental", {})
+    technical   = body.get("technical", {})
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY","")
+    if not api_key:
+        raise HTTPException(500,"Chưa set ANTHROPIC_API_KEY")
+
+    lat   = technical.get("latest", {})
+    ichi  = technical.get("ichimoku", {})
+    fib   = technical.get("fibonacci", {})
+    cp    = technical.get("candle_patterns", [])
+    vol   = technical.get("volume_signal", {})
+    score = fundamental.get("score", 0)
+    price = lat.get("close", 0)
+
+    prompt = f"""Phân tích cổ phiếu {ticker} dựa trên dữ liệu sau:
+
+GIÁ HIỆN TẠI: {price}k đồng
+ĐIỂM BUFFETT: {score}/14
+ROE: {fundamental.get('roe','—')}% | P/E: {fundamental.get('pe','—')}x | Biên gộp: {fundamental.get('gross_margin','—')}%
+DCF: {fundamental.get('dcf','—')} | MOS: {fundamental.get('mos','—')}%
+
+ICHIMOKU: {ichi.get('position','—')} (Tenkan:{ichi.get('tenkan','—')} Kijun:{ichi.get('kijun','—')})
+TK Cross: {ichi.get('tk_cross') or 'Không có'}
+RSI: {lat.get('rsi','—')} | MACD: {lat.get('macd','—')}
+MA20: {lat.get('ma20','—')} | MA50: {lat.get('ma50','—')}
+FIBONACCI zone: {fib.get('current_zone','—')}
+VOLUME: {vol.get('vol_ratio','—')}x TB20 | {vol.get('warning') or 'Bình thường'}
+MÔ HÌNH NẾN: {', '.join(p['name']+' ('+p['meaning']+')' for p in cp) or 'Không rõ'}
+
+Hãy đưa ra:
+1. VERDICT: CÓ THỂ MUA / CHỜ THÊM / TRÁNH XA (dòng đầu tiên, viết hoa)
+2. Lý do chính (3 bullet points ngắn)
+3. Vùng mua hợp lý (nếu MUA/CHỜ)
+4. Mục tiêu giá (TP) và Cắt lỗ (SL) cụ thể
+5. Risk/Reward ratio
+6. 1 rủi ro quan trọng nhất
+
+{STREET_SMART_RULES}
+
+Trả lời bằng tiếng Việt, súc tích, thực chiến. Dùng bullet points."""
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        res = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"Content-Type":"application/json","x-api-key":api_key,"anthropic-version":"2023-06-01"},
+            json={"model":"claude-haiku-4-5-20251001","max_tokens":1000,
+                  "system":f"Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam.\n{STREET_SMART_RULES}",
+                  "messages":[{"role":"user","content":prompt}]},
+        )
+    data = res.json()
+    if not res.is_success:
+        raise HTTPException(res.status_code, data.get("error",{}).get("message","Lỗi API"))
+    text = data["content"][0]["text"] if data.get("content") else ""
+    return ok({"analysis": text, "ticker": ticker})
+
 
 @app.post("/api/analyze-claude")
 async def analyze_claude(request: Request):
