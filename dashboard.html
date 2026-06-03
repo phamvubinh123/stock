@@ -1769,6 +1769,8 @@ async function removeWl(ticker) {
     const r = await fetch('/api/watchlist/'+ticker, {method:'DELETE', headers: _wlHeaders()});
     const d = await r.json();
     renderWlTags(d.watchlist || []);
+    // Xóa row tương ứng khỏi bảng radar (không reload)
+    document.querySelector(`#radarContainer tr[data-ticker="${ticker}"]`)?.remove();
   } catch {}
 }
 
