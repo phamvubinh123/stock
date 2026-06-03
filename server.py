@@ -1285,16 +1285,74 @@ def get_technical(ticker: str, period: int = Query(90)):
         ma20      = safe_float(latest.get("ma20"))
         ma50      = safe_float(latest.get("ma50"))
 
+        ma20_prev  = safe_float(prev.get("ma20"))
+        ma50_prev  = safe_float(prev.get("ma50"))
+        bb_upper   = safe_float(latest.get("bb_upper"))
+        bb_lower   = safe_float(latest.get("bb_lower"))
+        bb_mid     = safe_float(latest.get("bb_mid"))
+        vol_cur    = safe_float(latest.get("volume"))
+        avg_vol    = float(df["volume"].tail(20).mean()) if "volume" in df.columns else None
+
         signals = []
-        if rsi_val and rsi_val < 30:   signals.append("RSI quá bán — tín hiệu mua")
-        elif rsi_val and rsi_val > 70: signals.append("RSI quá mua — cảnh báo")
+
+        # RSI
+        if rsi_val:
+            if rsi_val < 30:
+                signals.append({"type":"bull","text":f"RSI={rsi_val:.1f} — quá bán, tín hiệu mua"})
+            elif rsi_val > 70:
+                signals.append({"type":"bear","text":f"RSI={rsi_val:.1f} — quá mua, cảnh báo bán"})
+            elif 30 <= rsi_val <= 45:
+                signals.append({"type":"neutral","text":f"RSI={rsi_val:.1f} — vùng trung lập, đang hồi phục"})
+
+        # MACD crossover
         if all([macd_val, macd_sig, macd_prev, macd_sp]):
             if macd_val > macd_sig and macd_prev <= macd_sp:
-                signals.append("MACD cắt lên — bullish")
+                signals.append({"type":"bull","text":"MACD cắt lên đường Signal — xu hướng tăng"})
             elif macd_val < macd_sig and macd_prev >= macd_sp:
-                signals.append("MACD cắt xuống — bearish")
-        if all([price, ma20, ma50]) and price > ma20 > ma50:
-            signals.append("Giá trên MA20 và MA50 — xu hướng tăng")
+                signals.append({"type":"bear","text":"MACD cắt xuống đường Signal — xu hướng giảm"})
+            # MACD dương/âm
+            if macd_val and macd_val > 0:
+                signals.append({"type":"bull","text":f"MACD={macd_val:.2f} dương — momentum tăng"})
+            elif macd_val and macd_val < 0:
+                signals.append({"type":"bear","text":f"MACD={macd_val:.2f} âm — momentum giảm"})
+
+        # MA trend
+        if all([price, ma20, ma50]):
+            if price > ma20 > ma50:
+                signals.append({"type":"bull","text":"Giá > MA20 > MA50 — uptrend rõ ràng"})
+            elif price < ma20 < ma50:
+                signals.append({"type":"bear","text":"Giá < MA20 < MA50 — downtrend rõ ràng"})
+            elif price > ma50 and price < ma20:
+                signals.append({"type":"neutral","text":"Giá dưới MA20 nhưng trên MA50 — cần theo dõi"})
+
+        # Golden cross / Death cross
+        if all([ma20, ma50, ma20_prev, ma50_prev]):
+            if ma20 > ma50 and ma20_prev <= ma50_prev:
+                signals.append({"type":"bull","text":"Golden Cross — MA20 vừa cắt lên MA50 (tín hiệu mua mạnh)"})
+            elif ma20 < ma50 and ma20_prev >= ma50_prev:
+                signals.append({"type":"bear","text":"Death Cross — MA20 vừa cắt xuống MA50 (tín hiệu bán mạnh)"})
+
+        # Bollinger Bands
+        if all([price, bb_upper, bb_lower, bb_mid]):
+            bb_width = (bb_upper - bb_lower) / bb_mid if bb_mid else None
+            if price >= bb_upper:
+                signals.append({"type":"bear","text":f"Giá chạm Bollinger Upper ({bb_upper:.1f}k) — có thể điều chỉnh"})
+            elif price <= bb_lower:
+                signals.append({"type":"bull","text":f"Giá chạm Bollinger Lower ({bb_lower:.1f}k) — cơ hội mua"})
+            if bb_width and bb_width < 0.04:
+                signals.append({"type":"neutral","text":"Bollinger Bands co hẹp — sắp có breakout mạnh"})
+
+        # Volume spike
+        if vol_cur and avg_vol and avg_vol > 0:
+            ratio = vol_cur / avg_vol
+            if ratio >= 2.0:
+                signals.append({"type":"bull","text":f"Volume đột biến {ratio:.1f}x trung bình 20 phiên — quan tâm"})
+            elif ratio <= 0.4:
+                signals.append({"type":"neutral","text":"Volume thấp — giao dịch thờ ơ, thận trọng"})
+
+        # Nếu không có tín hiệu
+        if not signals:
+            signals.append({"type":"neutral","text":"Chưa có tín hiệu rõ ràng — thị trường đang tích lũy"})
 
         cols = ["time","open","high","low","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
         return ok({

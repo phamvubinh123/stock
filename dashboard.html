@@ -1492,6 +1492,10 @@ async function fetchTA() {
     const hist=d.history||[];
     const l=d.latest;
 
+    // Tính bulls/bears trước
+    const bulls=d.signals.filter(s=>s.type==='bull').length;
+    const bears=d.signals.filter(s=>s.type==='bear').length;
+
     // Stat grid (vnstock trả về đã là nghìn đồng — không chia thêm)
     document.getElementById('taStats').innerHTML=[
       {v:l.close?fmt(l.close,1)+'k':'—',l:'Giá',cls:''},
@@ -1499,16 +1503,17 @@ async function fetchTA() {
       {v:l.macd?fmt(l.macd,2):'—',l:'MACD',cls:l.macd>l.macd_signal?'cg':'cr'},
       {v:l.ma20?fmt(l.ma20,1)+'k':'—',l:'MA20',cls:''},
       {v:l.ma50?fmt(l.ma50,1)+'k':'—',l:'MA50',cls:''},
-      {v:fmt(d.signals.length)+' tín hiệu',l:'Tín hiệu',cls:d.signals.length?'cg':''},
+      {v:`▲${bulls} ▼${bears}`,l:'Tín hiệu',cls:bulls>bears?'cg':bears>bulls?'cr':''},
     ].map(s=>`<div class="stat"><div class="stat-val ${s.cls}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
 
     // Signals
+    const sigColors={bull:{bg:'var(--green-bg)',fg:'var(--green)',icon:'▲'},bear:{bg:'var(--red-bg)',fg:'var(--red)',icon:'▼'},neutral:{bg:'#f5f5f5',fg:'var(--muted)',icon:'●'}};
     document.getElementById('taSignals').innerHTML=d.signals.length
       ?d.signals.map(s=>{
-        const bull=s.includes('tăng')||s.includes('bullish')||s.includes('mua');
-        return `<div style="padding:10px;background:${bull?'var(--green-bg)':'var(--red-bg)'};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${bull?'var(--green)':'var(--red)'}">${s}</div>`;
+        const c=sigColors[s.type]||sigColors.neutral;
+        return `<div style="padding:8px 12px;background:${c.bg};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${c.fg};display:flex;gap:8px;align-items:center"><span>${c.icon}</span><span>${s.text||s}</span></div>`;
       }).join('')
-      :'<div class="empty" style="padding:20px">Không có tín hiệu rõ ràng</div>';
+      :'<div class="empty" style="padding:20px">Không có tín hiệu</div>';
 
     document.getElementById('taChartTitle').textContent=ma;
     document.getElementById('taResult').style.display='block';
