@@ -275,6 +275,32 @@ def get_trading():
     return Trading
 
 
+# ─────────────────────────────────────────────
+# CACHE — in-memory, TTL theo loại dữ liệu
+# ─────────────────────────────────────────────
+import time as _time
+_cache: dict = {}
+CACHE_TTL = {"bctc": 86400, "price": 300, "technical": 300, "scan": 300}
+
+def cache_get(key: str):
+    if key in _cache:
+        data, ts = _cache[key]
+        ttl_type = key.split(":")[0]
+        ttl = CACHE_TTL.get(ttl_type, 300)
+        if _time.time() - ts < ttl:
+            return data
+        del _cache[key]
+    return None
+
+def cache_set(key: str, data):
+    _cache[key] = (data, _time.time())
+
+def cache_clear(prefix: str = ""):
+    keys = [k for k in _cache if k.startswith(prefix)] if prefix else list(_cache.keys())
+    for k in keys:
+        del _cache[k]
+
+
 def get_quote():
     from vnstock import Quote
     return Quote
@@ -881,6 +907,11 @@ async def fetch_ticker(
 ):
     ticker = ticker.upper().strip()
     period = "year" if yearly == "1" else "quarter"
+    cache_key = f"bctc:{ticker}:{period}:{n}"
+    cached = cache_get(cache_key)
+    if cached:
+        log.info(f"[CACHE HIT] {cache_key}")
+        return ok(cached)
     Finance = get_finance()
 
     result = {
@@ -1184,6 +1215,8 @@ async def fetch_ticker(
         result["ok"] = False
         result["message"] = str(e)
 
+    if result.get("ok"):
+        cache_set(cache_key, result)
     return ok(result)
 
 
@@ -1274,6 +1307,11 @@ def get_technical(ticker: str, period: int = Query(90)):
         Quote = get_quote()
 
         ticker = ticker.upper()
+        cache_key = f"technical:{ticker}:{period}"
+        cached = cache_get(cache_key)
+        if cached:
+            log.info(f"[CACHE HIT] {cache_key}")
+            return ok(cached)
         end_date = str(datetime.date.today())
         start_date = str(datetime.date.today() - datetime.timedelta(days=period * 2))
 
@@ -1432,7 +1470,9 @@ def get_technical(ticker: str, period: int = Query(90)):
             },
             "signals": signals,
             "history": df[cols].to_dict(orient="records"),
-        })
+        }
+        cache_set(cache_key, payload)
+        return ok(payload)
     except HTTPException:
         raise
     except Exception as e:
@@ -1927,6 +1967,158 @@ def delete_dca_ticker(ticker: str, request: Request):
     data.pop(ticker.upper(), None)
     save_dca(data, u)
     return ok({"ok": True})
+
+@app.get("/api/portfolio/summary")
+async def portfolio_summary(request: Request):
+    """Tính P&L realtime cho toàn bộ danh mục DCA."""
+    u = get_username(request)
+    dca = load_dca(u)
+    if not dca:
+        return ok({"items": [], "total_cost": 0, "total_value": 0, "total_pnl": 0, "total_pnl_pct": 0})
+
+    loop = asyncio.get_event_loop()
+    items = []
+    total_cost = total_value = 0.0
+
+    async def get_price(ticker: str) -> float:
+        ck = f"price:{ticker}"
+        cached = cache_get(ck)
+        if cached:
+            return cached
+        try:
+            Quote = get_quote()
+            today = str(datetime.date.today())
+            m_ago = str(datetime.date.today() - datetime.timedelta(days=10))
+            df = await loop.run_in_executor(
+                None, lambda t=ticker: Quote(symbol=t, source="KBS").history(start=m_ago, end=today)
+            )
+            price = float(df["close"].iloc[-1]) if df is not None and not df.empty else 0
+            cache_set(ck, price)
+            return price
+        except Exception:
+            return 0.0
+
+    for ticker, txns in dca.items():
+        cur_price = await get_price(ticker)
+        total_shares = sum(float(t["shares"]) for t in txns)
+        avg_price    = sum(float(t["shares"]) * float(t["price"]) for t in txns) / total_shares if total_shares else 0
+        cost         = total_shares * avg_price
+        value        = total_shares * cur_price
+        pnl          = value - cost
+        pnl_pct      = (pnl / cost * 100) if cost else 0
+        total_cost  += cost
+        total_value += value
+        items.append({
+            "ticker": ticker,
+            "shares": round(total_shares, 0),
+            "avg_price": round(avg_price, 2),
+            "cur_price": round(cur_price, 2),
+            "cost":   round(cost, 1),
+            "value":  round(value, 1),
+            "pnl":    round(pnl, 1),
+            "pnl_pct": round(pnl_pct, 2),
+        })
+
+    items.sort(key=lambda x: abs(x["value"]), reverse=True)
+    total_pnl     = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
+    return ok({
+        "items":         items,
+        "total_cost":    round(total_cost, 1),
+        "total_value":   round(total_value, 1),
+        "total_pnl":     round(total_pnl, 1),
+        "total_pnl_pct": round(total_pnl_pct, 2),
+    })
+
+
+# ─────────────────────────────────────────────
+# ROUTES — SO SÁNH NGÀNH (Phase 4.3)
+# ─────────────────────────────────────────────
+
+SECTOR_MAP: dict = {
+    # Công nghệ
+    "FPT": ("Công nghệ", ["FPT","CMG","VGI","ELC","ICT"]),
+    "CMG": ("Công nghệ", ["FPT","CMG","VGI","ELC","ICT"]),
+    "VGI": ("Công nghệ", ["FPT","CMG","VGI","ELC","ICT"]),
+    # Ngân hàng
+    "VCB": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    "BID": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    "CTG": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    "TCB": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    "MBB": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    "ACB": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    "VPB": ("Ngân hàng", ["VCB","BID","CTG","TCB","MBB","ACB","VPB","HDB"]),
+    # Bất động sản
+    "VHM": ("Bất động sản", ["VHM","VIC","NVL","PDR","KDH","DXG","BCM"]),
+    "VIC": ("Bất động sản", ["VHM","VIC","NVL","PDR","KDH","DXG","BCM"]),
+    "NVL": ("Bất động sản", ["VHM","VIC","NVL","PDR","KDH","DXG","BCM"]),
+    "PDR": ("Bất động sản", ["VHM","VIC","NVL","PDR","KDH","DXG","BCM"]),
+    "KDH": ("Bất động sản", ["VHM","VIC","NVL","PDR","KDH","DXG","BCM"]),
+    # Thép
+    "HPG": ("Thép", ["HPG","HSG","NKG","TLH"]),
+    "HSG": ("Thép", ["HPG","HSG","NKG","TLH"]),
+    # Bán lẻ
+    "MWG": ("Bán lẻ", ["MWG","PNJ","FRT","DGW"]),
+    "PNJ": ("Bán lẻ", ["MWG","PNJ","FRT","DGW"]),
+    "FRT": ("Bán lẻ", ["MWG","PNJ","FRT","DGW"]),
+    # Dầu khí
+    "GAS": ("Dầu khí", ["GAS","PVD","PVS","BSR","PLX"]),
+    "PVD": ("Dầu khí", ["GAS","PVD","PVS","BSR","PLX"]),
+    "PVS": ("Dầu khí", ["GAS","PVD","PVS","BSR","PLX"]),
+    # Thực phẩm
+    "VNM": ("Thực phẩm", ["VNM","SAB","MSN","MCH","QNS"]),
+    "SAB": ("Thực phẩm", ["VNM","SAB","MSN","MCH","QNS"]),
+    "MSN": ("Thực phẩm", ["VNM","SAB","MSN","MCH","QNS"]),
+    # Xây dựng
+    "HBC": ("Xây dựng vật liệu", ["HBC","CTD","FCN","VCG","BMP","CSV"]),
+    "CTD": ("Xây dựng vật liệu", ["HBC","CTD","FCN","VCG","BMP","CSV"]),
+    "BMP": ("Xây dựng vật liệu", ["HBC","CTD","FCN","VCG","BMP","CSV"]),
+    # Điện
+    "REE": ("Điện", ["REE","PC1","GEG","EVF","SBA","HND"]),
+    "PC1": ("Điện", ["REE","PC1","GEG","EVF","SBA","HND"]),
+}
+
+@app.get("/api/sector/{ticker}")
+async def sector_compare(ticker: str):
+    """So sánh mã với các mã cùng ngành."""
+    ticker = ticker.upper()
+    if ticker not in SECTOR_MAP:
+        return ok({"sector": "Không xác định", "peers": [], "target": ticker})
+
+    sector_name, peers = SECTOR_MAP[ticker]
+    # Lấy tối đa 4 mã khác (không bao gồm chính nó) + chính nó
+    compare_list = [ticker] + [p for p in peers if p != ticker][:4]
+
+    loop = asyncio.get_event_loop()
+
+    async def get_peer_data(t: str) -> dict:
+        ck = f"scan:{t}"
+        cached = cache_get(ck)
+        if cached:
+            return cached
+        try:
+            r = await loop.run_in_executor(None, scan_one_ticker, t)
+            cache_set(ck, r)
+            return r
+        except Exception:
+            return {"ticker": t, "score": 0, "key_metrics": {}}
+
+    results = await asyncio.gather(*[get_peer_data(t) for t in compare_list])
+    peers_out = []
+    for r in results:
+        km = r.get("key_metrics", {})
+        peers_out.append({
+            "ticker":       r.get("ticker", ""),
+            "score":        r.get("score", 0),
+            "roe":          km.get("roe"),
+            "pe":           km.get("pe"),
+            "gross_margin": km.get("gross_margin"),
+            "debt_ratio":   km.get("debt_ratio"),
+            "price":        r.get("price", 0),
+            "is_target":    r.get("ticker","") == ticker,
+        })
+    peers_out.sort(key=lambda x: x["score"], reverse=True)
+    return ok({"sector": sector_name, "target": ticker, "peers": peers_out})
 
 
 # ─────────────────────────────────────────────

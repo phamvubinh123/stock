@@ -619,6 +619,11 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
             <div class="card-title">Kết luận</div>
             <div id="verdictBox"></div>
           </div>
+          <!-- So sánh ngành -->
+          <div class="card" id="sectorCard" style="display:none">
+            <div class="card-title">🏭 So sánh ngành — <span id="sectorName"></span></div>
+            <div id="sectorTable"></div>
+          </div>
         </div>
       </div>
 
@@ -627,6 +632,16 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 
         <!-- TAB: TRUNG BÌNH GIÁ -->
         <div id="calc-avg">
+          <!-- P&L Summary -->
+          <div class="card" id="pnlSummaryCard" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <div class="card-title" style="margin:0">📊 P&L Thực tế</div>
+              <button class="btn" style="font-size:.72rem" onclick="loadPortfolioSummary()">↻ Cập nhật giá</button>
+            </div>
+            <div class="stat-grid" id="pnlStats"></div>
+            <div style="margin-top:12px" id="pnlRows"></div>
+          </div>
+
           <!-- Danh sách portfolio -->
           <div class="card" id="dcaPortfolioCard">
             <div class="card-title">Danh mục trung bình giá</div>
@@ -1470,6 +1485,9 @@ function analyze() {
 
   document.getElementById('results').classList.add('show');
   document.getElementById('results').scrollIntoView({behavior:'smooth'});
+  // Load so sánh ngành
+  const curTicker = document.getElementById('maCP')?.value?.trim()?.toUpperCase();
+  if (curTicker) loadSectorCompare(curTicker);
   const colorScore=scoreColor(score);
   const sEl=document.getElementById('sNum');
   sEl.textContent=score; sEl.style.color=colorScore;
@@ -1742,6 +1760,7 @@ async function dcaLoad() {
     dcaData = await r.json();
     dcaRenderPortfolio();
     dcaInitForm();
+    if (Object.keys(dcaData).length) loadPortfolioSummary();
   } catch(e) { console.error('DCA load error', e); }
 }
 
@@ -1953,6 +1972,79 @@ function showToast(msg, type='info') {
 
 // Polling triggered alerts mỗi 60s
 setInterval(loadTriggeredAlerts, 60000);
+
+// ═══════════════════════════════════════════
+// PORTFOLIO P&L SUMMARY (Phase 4.2)
+// ═══════════════════════════════════════════
+async function loadPortfolioSummary() {
+  try {
+    const r = await fetch('/api/portfolio/summary', { headers: {'X-Token': authToken} });
+    const d = await r.json();
+    const data = d;
+    if (!data.items || !data.items.length) { document.getElementById('pnlSummaryCard').style.display='none'; return; }
+    document.getElementById('pnlSummaryCard').style.display='block';
+    const pnlClr = data.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const pnlSign = data.total_pnl >= 0 ? '+' : '';
+    document.getElementById('pnlStats').innerHTML = [
+      {v: fmt(data.total_cost/1e3,1)+'B', l:'Vốn bỏ vào'},
+      {v: fmt(data.total_value/1e3,1)+'B', l:'Giá trị hiện tại'},
+      {v: pnlSign+fmt(data.total_pnl/1e3,1)+'B', l:'Lãi/Lỗ', cls: data.total_pnl>=0?'cg':'cr'},
+      {v: pnlSign+fmt(data.total_pnl_pct,2)+'%', l:'% Thay đổi', cls: data.total_pnl>=0?'cg':'cr'},
+    ].map(s=>`<div class="stat"><div class="stat-val ${s.cls||''}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+
+    document.getElementById('pnlRows').innerHTML = data.items.map(item => {
+      const clr = item.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const sign = item.pnl >= 0 ? '+' : '';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.83rem">
+        <div style="flex:0 0 50px;font-weight:700">${item.ticker}</div>
+        <div style="flex:1;color:var(--muted)">
+          ${fmt(item.shares,0)} CP · TB ${fmt(item.avg_price,1)}k → <b>${fmt(item.cur_price,1)}k</b>
+        </div>
+        <div style="text-align:right;font-weight:600;color:${clr}">
+          ${sign}${fmt(item.pnl/1e3,1)}B <span style="font-size:.75rem">(${sign}${fmt(item.pnl_pct,1)}%)</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error('Portfolio summary error', e); }
+}
+
+// ═══════════════════════════════════════════
+// SO SÁNH NGÀNH (Phase 4.3)
+// ═══════════════════════════════════════════
+async function loadSectorCompare(ticker) {
+  const card = document.getElementById('sectorCard');
+  const tbl  = document.getElementById('sectorTable');
+  card.style.display = 'none';
+  try {
+    const r = await fetch(`/api/sector/${ticker}`, { headers: {'X-Token': authToken} });
+    const d = await r.json();
+    if (!d.peers || !d.peers.length) return;
+    document.getElementById('sectorName').textContent = d.sector;
+    card.style.display = 'block';
+    tbl.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem">
+      <thead><tr style="border-bottom:2px solid var(--border);color:var(--muted)">
+        <th style="text-align:left;padding:6px 8px">Mã</th>
+        <th style="text-align:right;padding:6px 4px">Score</th>
+        <th style="text-align:right;padding:6px 4px">ROE</th>
+        <th style="text-align:right;padding:6px 4px">P/E</th>
+        <th style="text-align:right;padding:6px 4px">Biên gộp</th>
+        <th style="text-align:right;padding:6px 4px">Giá</th>
+      </tr></thead><tbody>
+      ${d.peers.map(p => {
+        const hl = p.is_target ? 'background:var(--purple-light);font-weight:700' : '';
+        const sc = scoreColor(p.score||0);
+        return `<tr style="border-bottom:1px solid var(--border);${hl}">
+          <td style="padding:7px 8px">${p.is_target?'▶ ':''}<b>${p.ticker}</b></td>
+          <td style="text-align:right;padding:7px 4px;color:${sc}">${p.score||0}/14</td>
+          <td style="text-align:right;padding:7px 4px">${p.roe!=null?fmt(p.roe,1)+'%':'—'}</td>
+          <td style="text-align:right;padding:7px 4px">${p.pe>0?fmt(p.pe,1)+'x':'—'}</td>
+          <td style="text-align:right;padding:7px 4px">${p.gross_margin!=null?fmt(p.gross_margin,1)+'%':'—'}</td>
+          <td style="text-align:right;padding:7px 4px">${p.price>0?fmt(p.price,1):'—'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+  } catch(e) { console.error('Sector compare error', e); }
+}
 
 // ═══════════════════════════════════════════
 // INIT
