@@ -1296,7 +1296,7 @@ def get_technical(ticker: str, period: int = Query(90)):
         if all([price, ma20, ma50]) and price > ma20 > ma50:
             signals.append("Giá trên MA20 và MA50 — xu hướng tăng")
 
-        cols = ["time","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
+        cols = ["time","open","high","low","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
         return ok({
             "ticker": ticker, "period": period,
             "latest": {

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock Agent — iBoard Style</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root {
   --bg: #F0F1F5;
@@ -139,6 +140,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: var(--purple); color: #fff; border-color: var(--purple); }
 .btn-primary:hover { background: var(--purple-dark); border-color: var(--purple-dark); color: #fff; }
+.tf-btn { padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text2); font-size:.75rem; font-weight:500; cursor:pointer; transition:all .15s; }
+.tf-btn.active { background:var(--purple); color:#fff; border-color:var(--purple); }
+.tf-btn:hover:not(.active) { background:var(--purple-light); color:var(--purple); }
 .btn-buy { background: var(--green); color: #fff; border-color: var(--green); flex: 1; padding: 12px; font-weight: 700; border-radius: 8px; }
 .btn-sm { padding: 5px 10px; font-size: .72rem; }
 .btn-danger { border-color: var(--red); color: var(--red); }
@@ -732,20 +736,34 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
       <div class="page" id="page-technical">
         <div class="card">
           <div class="card-title">Phân tích kỹ thuật</div>
-          <div class="fetch-row">
+          <div class="fetch-row" style="align-items:flex-end;gap:10px;flex-wrap:wrap">
             <div class="fg" style="flex:0 0 110px">
               <label>Mã CP</label>
               <input type="text" id="taMA" placeholder="FPT" maxlength="10" style="text-transform:uppercase"
                 onkeydown="if(event.key==='Enter')fetchTA()">
             </div>
-            <div class="fg" style="flex:0 0 90px">
-              <label>Số ngày</label>
-              <input type="number" id="taPeriod" value="90" min="30" max="365">
+            <div style="display:flex;gap:6px;align-items:center;padding-bottom:2px">
+              <label style="font-size:.75rem;color:var(--muted);white-space:nowrap">Khung thời gian:</label>
+              <div id="tfBtns" style="display:flex;gap:4px">
+                <button class="tf-btn" data-tf="1M" onclick="setTF(this,'1M')">1T</button>
+                <button class="tf-btn active" data-tf="3M" onclick="setTF(this,'3M')">3T</button>
+                <button class="tf-btn" data-tf="6M" onclick="setTF(this,'6M')">6T</button>
+                <button class="tf-btn" data-tf="1Y" onclick="setTF(this,'1Y')">1N</button>
+              </div>
             </div>
             <button class="btn btn-primary" onclick="fetchTA()" style="align-self:flex-end">Phân tích</button>
           </div>
         </div>
         <div id="taResult" style="display:none">
+          <div class="card" style="padding-bottom:0">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div class="card-title" style="margin:0" id="taChartTitle">—</div>
+              <div id="taHoverInfo" style="font-size:.75rem;color:var(--muted);text-align:right"></div>
+            </div>
+            <div id="chartCandle" style="height:320px;border-radius:8px;overflow:hidden"></div>
+            <div id="chartRsi" style="height:110px;margin-top:6px;border-radius:8px;overflow:hidden"></div>
+            <div id="chartMacd" style="height:110px;margin-top:6px;margin-bottom:12px;border-radius:8px;overflow:hidden"></div>
+          </div>
           <div class="card"><div class="stat-grid" id="taStats"></div></div>
           <div class="card">
             <div class="card-title">Tín hiệu</div>
@@ -1428,28 +1446,146 @@ async function removeWl(ticker) {
 // ═══════════════════════════════════════════
 // TECHNICAL
 // ═══════════════════════════════════════════
+// ── Chart instances (destroy trước khi tạo mới)
+let _chartCandle=null, _chartRsi=null, _chartMacd=null;
+let _currentTF='3M';
+
+function setTF(el, tf) {
+  _currentTF = tf;
+  document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  const ma = document.getElementById('taMA').value.trim().toUpperCase();
+  if (ma) fetchTA();
+}
+
+function tfToPeriod(tf) {
+  return {'1M':30,'3M':90,'6M':180,'1Y':365}[tf]||90;
+}
+
+function destroyCharts() {
+  [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c&&c.remove();}catch{}});
+  _chartCandle=_chartRsi=_chartMacd=null;
+}
+
+function makeChart(containerId, opts={}) {
+  const el = document.getElementById(containerId);
+  el.innerHTML='';
+  return LightweightCharts.createChart(el, {
+    layout:{ background:{color:'#fff'}, textColor:'#555' },
+    grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
+    crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale:{ borderColor:'#e0e0e0' },
+    timeScale:{ borderColor:'#e0e0e0', timeVisible:true },
+    handleScroll:true, handleScale:true,
+    ...opts
+  });
+}
+
 async function fetchTA() {
   const ma=document.getElementById('taMA').value.trim().toUpperCase();
-  const period=document.getElementById('taPeriod').value||90;
   if(!ma){alert('Nhập mã CP!');return;}
+  const period = tfToPeriod(_currentTF);
   try {
-    const r=await fetch(`/api/technical/${ma}?period=${period}`);
+    const r=await fetch(`/api/technical/${ma}?period=${period}`, {headers:{'X-Token':authToken}});
     const d=await r.json();
     if(!r.ok) throw new Error(d.detail||'Lỗi');
+    const hist=d.history||[];
     const l=d.latest;
+
+    // Stat grid (vnstock trả về đã là nghìn đồng — không chia thêm)
     document.getElementById('taStats').innerHTML=[
-      {v:l.close?fmt(l.close/1000,2):'—',l:'Giá',cls:''},
+      {v:l.close?fmt(l.close,1)+'k':'—',l:'Giá',cls:''},
       {v:l.rsi?fmt(l.rsi,1):'—',l:'RSI',cls:l.rsi<30?'cg':l.rsi>70?'cr':'cy'},
       {v:l.macd?fmt(l.macd,2):'—',l:'MACD',cls:l.macd>l.macd_signal?'cg':'cr'},
-      {v:l.ma20?fmt(l.ma20/1000,2):'—',l:'MA20',cls:''},
-      {v:l.ma50?fmt(l.ma50/1000,2):'—',l:'MA50',cls:''},
+      {v:l.ma20?fmt(l.ma20,1)+'k':'—',l:'MA20',cls:''},
+      {v:l.ma50?fmt(l.ma50,1)+'k':'—',l:'MA50',cls:''},
       {v:fmt(d.signals.length)+' tín hiệu',l:'Tín hiệu',cls:d.signals.length?'cg':''},
     ].map(s=>`<div class="stat"><div class="stat-val ${s.cls}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+
+    // Signals
     document.getElementById('taSignals').innerHTML=d.signals.length
-      ?d.signals.map(s=>`<div style="padding:10px;background:var(--green-bg);border-radius:8px;margin-bottom:6px;font-size:.82rem;color:var(--green)">${s}</div>`).join('')
+      ?d.signals.map(s=>{
+        const bull=s.includes('tăng')||s.includes('bullish')||s.includes('mua');
+        return `<div style="padding:10px;background:${bull?'var(--green-bg)':'var(--red-bg)'};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${bull?'var(--green)':'var(--red)'}">${s}</div>`;
+      }).join('')
       :'<div class="empty" style="padding:20px">Không có tín hiệu rõ ràng</div>';
+
+    document.getElementById('taChartTitle').textContent=ma;
     document.getElementById('taResult').style.display='block';
-  } catch(e){alert('Lỗi: '+e.message);}
+
+    // Build chart data
+    const candleData=[], volData=[], ma20Data=[], ma50Data=[], rsiData=[], macdData=[], signalData=[], histData=[];
+    hist.forEach(row=>{
+      if(!row.time) return;
+      const t=row.time.slice(0,10); // "YYYY-MM-DD"
+      if(row.open&&row.high&&row.low&&row.close)
+        candleData.push({time:t,open:row.open,high:row.high,low:row.low,close:row.close});
+      if(row.volume!=null) volData.push({time:t,value:row.volume,color:row.close>=row.open?'rgba(38,166,154,0.5)':'rgba(239,83,80,0.5)'});
+      if(row.ma20) ma20Data.push({time:t,value:row.ma20});
+      if(row.ma50) ma50Data.push({time:t,value:row.ma50});
+      if(row.rsi!=null) rsiData.push({time:t,value:row.rsi});
+      if(row.macd!=null) macdData.push({time:t,value:row.macd});
+      if(row.macd_signal!=null) signalData.push({time:t,value:row.macd_signal});
+      if(row.macd_hist!=null) histData.push({time:t,value:row.macd_hist,color:row.macd_hist>=0?'rgba(38,166,154,0.7)':'rgba(239,83,80,0.7)'});
+    });
+
+    destroyCharts();
+
+    // ── Chart 1: Candlestick + Volume + MA20 + MA50
+    _chartCandle = makeChart('chartCandle');
+    const candleSeries = _chartCandle.addCandlestickSeries({
+      upColor:'#26a69a', downColor:'#ef5350', borderVisible:false,
+      wickUpColor:'#26a69a', wickDownColor:'#ef5350',
+    });
+    candleSeries.setData(candleData);
+
+    const volSeries = _chartCandle.addHistogramSeries({
+      priceFormat:{type:'volume'}, priceScaleId:'vol',
+    });
+    _chartCandle.priceScale('vol').applyOptions({scaleMargins:{top:0.8,bottom:0}});
+    volSeries.setData(volData);
+
+    const ma20Series = _chartCandle.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+    ma20Series.setData(ma20Data);
+    const ma50Series = _chartCandle.addLineSeries({color:'#6366f1',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+    ma50Series.setData(ma50Data);
+
+    // ── Chart 2: RSI
+    _chartRsi = makeChart('chartRsi', {rightPriceScale:{scaleMargins:{top:0.1,bottom:0.1}}});
+    const rsiSeries = _chartRsi.addLineSeries({color:'#8b5cf6',lineWidth:2,priceLineVisible:false,lastValueVisible:true});
+    rsiSeries.setData(rsiData);
+    rsiSeries.createPriceLine({price:70,color:'#ef5350',lineWidth:1,lineStyle:2,title:'70'});
+    rsiSeries.createPriceLine({price:30,color:'#26a69a',lineWidth:1,lineStyle:2,title:'30'});
+
+    // ── Chart 3: MACD
+    _chartMacd = makeChart('chartMacd');
+    const histSeries = _chartMacd.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});
+    histSeries.setData(histData);
+    const macdLineSeries = _chartMacd.addLineSeries({color:'#2563eb',lineWidth:2,priceLineVisible:false,lastValueVisible:true});
+    macdLineSeries.setData(macdData);
+    const signalLineSeries = _chartMacd.addLineSeries({color:'#f97316',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+    signalLineSeries.setData(signalData);
+
+    // Sync crosshair + timeScale
+    const allCharts=[_chartCandle,_chartRsi,_chartMacd];
+    allCharts.forEach(src=>{
+      src.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+        if(!range) return;
+        allCharts.forEach(dst=>{if(dst!==src) dst.timeScale().setVisibleLogicalRange(range);});
+      });
+    });
+
+    // Hover tooltip
+    const hoverEl=document.getElementById('taHoverInfo');
+    _chartCandle.subscribeCrosshairMove(param=>{
+      if(!param.time||!param.seriesData) return;
+      const c=param.seriesData.get(candleSeries);
+      if(c) hoverEl.innerHTML=`<b>${param.time}</b> &nbsp; O:${fmt(c.open,2)} H:${fmt(c.high,2)} L:${fmt(c.low,2)} C:<b>${fmt(c.close,2)}</b>k`;
+    });
+
+    _chartCandle.timeScale().fitContent();
+
+  } catch(e){alert('Lỗi: '+e.message); console.error(e);}
 }
 
 // ═══════════════════════════════════════════
