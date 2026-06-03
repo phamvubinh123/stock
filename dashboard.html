@@ -1475,7 +1475,7 @@ function makeChart(containerId, opts={}) {
     grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
     crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
     rightPriceScale:{ borderColor:'#e0e0e0' },
-    timeScale:{ borderColor:'#e0e0e0', timeVisible:true },
+    timeScale:{ borderColor:'#e0e0e0', timeVisible:false },
     handleScroll:true, handleScale:true,
     ...opts
   });
@@ -1513,11 +1513,14 @@ async function fetchTA() {
     document.getElementById('taChartTitle').textContent=ma;
     document.getElementById('taResult').style.display='block';
 
-    // Build chart data
+    // Build chart data — dedup theo ngày (giữ row cuối cùng mỗi ngày)
+    const byDate={};
+    hist.forEach(row=>{ if(row.time) byDate[row.time.slice(0,10)]=row; });
+    const rows=Object.entries(byDate).sort((a,b)=>a[0]<b[0]?-1:1).map(e=>({...e[1],time:e[0]}));
+
     const candleData=[], volData=[], ma20Data=[], ma50Data=[], rsiData=[], macdData=[], signalData=[], histData=[];
-    hist.forEach(row=>{
-      if(!row.time) return;
-      const t=row.time.slice(0,10); // "YYYY-MM-DD"
+    rows.forEach(row=>{
+      const t=row.time;
       if(row.open&&row.high&&row.low&&row.close)
         candleData.push({time:t,open:row.open,high:row.high,low:row.low,close:row.close});
       if(row.volume!=null) volData.push({time:t,value:row.volume,color:row.close>=row.open?'rgba(38,166,154,0.5)':'rgba(239,83,80,0.5)'});
