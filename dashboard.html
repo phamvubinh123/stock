@@ -578,7 +578,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
               placeholder="🔍 Tìm mã hoặc tên công ty... (VD: FPT, Vinamilk)"
               autocomplete="off"
               oninput="showAutocomplete(this.value)"
-              onkeydown="if(event.key==='Enter')addAndScan(this.value)">
+              onkeydown="if(event.key==='Enter')addTicker(this.value)">
             <div id="autocompleteList" class="autocomplete-dropdown"></div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
@@ -2711,21 +2711,20 @@ function showAutocomplete(val) {
   ).slice(0, 8);
   if (!matches.length) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = matches.map(s =>
-    `<div class="autocomplete-item" onclick="addAndScan('${s.sym}')">
+    `<div class="autocomplete-item" onclick="addTicker('${s.sym}')">
       <span class="sym">${s.sym}</span><span class="name">${s.name}</span>
     </div>`
   ).join('');
   dropdown.style.display = 'block';
 }
 
-async function addAndScan(ticker) {
+async function addTicker(ticker) {
   const t = (ticker || document.getElementById('radarSearch')?.value || '').trim().toUpperCase();
   if (!t) return;
   const inp = document.getElementById('radarSearch');
   if (inp) inp.value = '';
   document.getElementById('autocompleteList').style.display = 'none';
   await addToWl(t);
-  triggerRadar();
 }
 
 document.addEventListener('click', e => {
