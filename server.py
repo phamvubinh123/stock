@@ -507,8 +507,8 @@ def compute_buffett_score(data: dict, n: int = 5) -> dict:
 # ─────────────────────────────────────────────
 # DAILY SCAN ENGINE
 # ─────────────────────────────────────────────
-async def scan_one_ticker(ticker: str) -> dict:
-    """Scan 1 mã, trả về dict tóm tắt."""
+def scan_one_ticker(ticker: str) -> dict:
+    """Scan 1 mã (sync), trả về dict tóm tắt."""
     try:
         Vnstock = get_vnstock()
         stock = Vnstock().stock(symbol=ticker, source="VCI")
@@ -656,11 +656,14 @@ async def run_daily_scan(watchlist: Optional[List[str]] = None, username: str = 
     symbols = watchlist or load_watchlist(username)
     log.info(f"Daily scan bắt đầu — {len(symbols)} mã: {symbols}")
 
-    results = []
-    for ticker in symbols:
-        r = await scan_one_ticker(ticker)
-        results.append(r)
-        await asyncio.sleep(0.5)  # rate limit friendly
+    loop = asyncio.get_event_loop()
+    sem = asyncio.Semaphore(3)
+
+    async def _run(t):
+        async with sem:
+            return await loop.run_in_executor(None, scan_one_ticker, t)
+
+    results = await asyncio.gather(*[_run(t) for t in symbols])
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
@@ -804,12 +807,24 @@ async def scan_stream(request: Request):
     symbols = load_watchlist(u)
 
     async def event_gen():
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        sem = asyncio.Semaphore(3)  # tối đa 3 mã song song
+
+        async def _scan_and_put(t):
+            async with sem:
+                r = await loop.run_in_executor(None, scan_one_ticker, t)
+                await queue.put(r)
+
+        tasks = [asyncio.create_task(_scan_and_put(t)) for t in symbols]
+
         results = []
-        for ticker in symbols:
-            r = await scan_one_ticker(ticker)
+        for _ in range(len(symbols)):
+            r = await queue.get()
             results.append(r)
-            await asyncio.sleep(0.3)
-            yield f"data: {json.dumps(r, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(r, ensure_ascii=False, cls=SafeEncoder)}\n\n"
+
+        await asyncio.gather(*tasks)
 
         # Sau khi xong hết, lưu kết quả và gửi event done
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
