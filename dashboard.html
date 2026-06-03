@@ -434,19 +434,19 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     <div class="sidebar-logo">📈 Stock Agent <span>AI</span></div>
     <button class="nav-item active" data-page="daily" onclick="showPage('daily')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Trang chủ
+      Dashboard
     </button>
     <button class="nav-item" data-page="buffett" onclick="showPage('buffett')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Phân tích
+      Phân tích cơ bản
     </button>
     <button class="nav-item" data-page="calculator" onclick="showPage('calculator')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
-      Calculator
+      Công cụ
     </button>
     <button class="nav-item" data-page="technical" onclick="showPage('technical')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      Kỹ thuật
+      Phân tích kỹ thuật
     </button>
     <div class="nav-sep"></div>
     <div class="sidebar-footer">
@@ -751,8 +751,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
                 <button class="tf-btn" data-tf="1Y" onclick="setTF(this,'1Y')">1N</button>
               </div>
             </div>
-            <button class="btn btn-primary" onclick="fetchTA()" style="align-self:flex-end">Phân tích</button>
+            <button class="btn btn-primary" id="btnTA" onclick="fetchTA()" style="align-self:flex-end">Phân tích</button>
           </div>
+          <div class="progress-bar" id="taProgBar"><div class="progress-fill"></div></div>
+          <div id="taLoadMsg" style="display:none;padding:10px 0 2px;font-size:.8rem;color:var(--muted);text-align:center"></div>
         </div>
         <div id="taResult" style="display:none">
           <div class="card" style="padding-bottom:0">
@@ -1481,13 +1483,29 @@ function makeChart(containerId, opts={}) {
   });
 }
 
+const TA_MSGS = [
+  'Đang tải dữ liệu giá lịch sử...',
+  'Đang tính RSI, MACD, Bollinger Bands...',
+  'Đang phân tích tín hiệu kỹ thuật...',
+  'Đang vẽ biểu đồ...',
+];
+
 async function fetchTA() {
   const ma=document.getElementById('taMA').value.trim().toUpperCase();
   if(!ma){alert('Nhập mã CP!');return;}
   const period = tfToPeriod(_currentTF);
+  const btn=document.getElementById('btnTA');
+  const prog=document.getElementById('taProgBar');
+  const msg=document.getElementById('taLoadMsg');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Đang phân tích...';
+  prog.classList.add('show'); msg.style.display='block';
+  let mi=0; msg.textContent=TA_MSGS[mi];
+  const ticker=setInterval(()=>{ mi=(mi+1)%TA_MSGS.length; msg.textContent=TA_MSGS[mi]; },900);
   try {
     const r=await fetch(`/api/technical/${ma}?period=${period}`, {headers:{'X-Token':authToken}});
     const d=await r.json();
+    clearInterval(ticker); prog.classList.remove('show'); msg.style.display='none';
+    btn.disabled=false; btn.textContent='Phân tích';
     if(!r.ok) throw new Error(d.detail||'Lỗi');
     const hist=d.history||[];
     const l=d.latest;
@@ -1559,9 +1577,18 @@ async function fetchTA() {
     ma20Series.setData(ma20Data);
     const ma50Series = _chartCandle.addLineSeries({color:'#6366f1',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'MA50'});
     ma50Series.setData(ma50Data);
-    const bbUpSeries = _chartCandle.addLineSeries({color:'rgba(100,116,139,0.5)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,title:'BB↑'});
+    // BB band: upper area fill xanh mờ, lower area fill trắng che phần dưới
+    const bbUpSeries = _chartCandle.addAreaSeries({
+      lineColor:'rgba(99,102,241,0.4)', lineWidth:1, lineStyle:2,
+      topColor:'rgba(99,102,241,0.08)', bottomColor:'rgba(99,102,241,0.08)',
+      priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false,
+    });
     bbUpSeries.setData(bbUpData);
-    const bbLoSeries = _chartCandle.addLineSeries({color:'rgba(100,116,139,0.5)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,title:'BB↓'});
+    const bbLoSeries = _chartCandle.addAreaSeries({
+      lineColor:'rgba(99,102,241,0.4)', lineWidth:1, lineStyle:2,
+      topColor:'rgba(255,255,255,0.95)', bottomColor:'rgba(255,255,255,0.95)',
+      priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false,
+    });
     bbLoSeries.setData(bbLoData);
 
     // ── Chart 2: RSI
@@ -1599,7 +1626,14 @@ async function fetchTA() {
 
     _chartCandle.timeScale().fitContent();
 
-  } catch(e){alert('Lỗi: '+e.message); console.error(e);}
+  } catch(e){
+    clearInterval(ticker);
+    document.getElementById('taProgBar').classList.remove('show');
+    document.getElementById('taLoadMsg').style.display='none';
+    document.getElementById('btnTA').disabled=false;
+    document.getElementById('btnTA').textContent='Phân tích';
+    alert('Lỗi: '+e.message); console.error(e);
+  }
 }
 
 // ═══════════════════════════════════════════
