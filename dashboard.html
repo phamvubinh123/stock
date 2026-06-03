@@ -156,7 +156,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .table-head { display: grid; grid-template-columns: 72px 1fr 72px 56px 80px 72px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: #FAFBFC; }
 .table-head span { font-size: .68rem; color: var(--text3); font-weight: 500; }
 .table-head span:not(:first-child) { text-align: right; }
-.table-row { display: grid; grid-template-columns: 72px 1fr 72px 56px 80px 72px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+.table-row { display: grid; grid-template-columns: 72px 1fr 72px 56px 80px 60px auto; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+.row-actions { display: flex; gap: 5px; justify-content: flex-end; }
+.btn-row { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text2); font-size: .7rem; font-weight: 500; cursor: pointer; white-space: nowrap; transition: all .12s; line-height: 1.3; }
+.btn-row:hover { background: var(--purple-light); color: var(--purple); border-color: var(--purple); }
 .table-row:hover { background: #F8F9FB; }
 .table-row .sym { font-size: .92rem; font-weight: 700; color: var(--text); }
 .table-row .sub { font-size: .65rem; color: var(--text3); margin-top: 1px; }
@@ -1205,16 +1208,20 @@ function renderPicks() {
   const list = [...(picksData.top_picks||[]),...(picksData.watchable||[]),...(picksData.avoid||[])].sort((a,b)=>(b.score||0)-(a.score||0));
   const container = document.getElementById('picksContainer');
   if (!list.length) { container.innerHTML = `<div class="empty">Chưa có dữ liệu</div>`; return; }
-  let html = `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>P/E</span><span>Biên gộp</span><span>Giá</span></div>`;
+  let html = `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>P/E</span><span>Biên gộp</span><span>Giá</span><span></span></div>`;
   list.forEach(t => {
     const km = t.key_metrics || {}, clr = scoreColor(t.score), fillW = Math.round((t.score/14)*100);
-    html += `<div class="table-row ${scoreRowClass(t.score)}" onclick="openInBuffett('${t.ticker}')">
+    html += `<div class="table-row ${scoreRowClass(t.score)}">
       <div><div class="sym">${t.ticker}</div><div class="sub">${t.cagr_lntt != null ? 'CAGR '+fmtPct(t.cagr_lntt) : ''}</div></div>
       <div class="cell"><div class="score-mini"><div class="score-track"><div class="score-fill" style="width:${fillW}%;background:${clr}"></div></div><span class="score-txt" style="color:${clr}">${fmt(t.score)}/14</span></div></div>
       <div class="cell">${km.roe != null ? fmtPct(km.roe) : '—'}</div>
       <div class="cell cell-sm">${km.pe > 0 ? fmt(km.pe,1)+'x' : '—'}</div>
       <div class="cell">${km.gross_margin != null ? fmtPct(km.gross_margin) : '—'}</div>
       <div class="cell vol">${t.price > 0 ? fmt(t.price,1) : '—'}</div>
+      <div class="row-actions">
+        <button class="btn-row" onclick="openInBuffett('${t.ticker}')">📊 Cơ bản</button>
+        <button class="btn-row" onclick="openInTechnical('${t.ticker}')">📈 KT</button>
+      </div>
     </div>`;
   });
   container.innerHTML = html + '</div>';
@@ -1227,7 +1234,7 @@ async function triggerScan() {
   if (notice) notice.style.display = 'block';
   picksData = {top_picks:[],watchable:[],avoid:[]};
   document.getElementById('picksContainer').innerHTML =
-    `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>P/E</span><span>Biên gộp</span><span>Giá</span></div><div id="streamRows"></div></div>`;
+    `<div class="data-table"><div class="table-head"><span>Mã</span><span>Score</span><span>ROE</span><span>P/E</span><span>Biên gộp</span><span>Giá</span><span></span></div><div id="streamRows"></div></div>`;
   try {
     await new Promise((resolve, reject) => {
       const es = new EventSource('/api/scan-stream');
@@ -1236,13 +1243,17 @@ async function triggerScan() {
         if (d.__done__) { picksData = d; renderPicks(); updateSummary(d); es.close(); resolve(); return; }
         const clr = scoreColor(d.score||0), fillW = Math.round(((d.score||0)/14)*100), km = d.key_metrics||{};
         const row = document.createElement('div');
-        row.className = `table-row ${scoreRowClass(d.score||0)}`; row.onclick = () => openInBuffett(d.ticker);
+        row.className = `table-row ${scoreRowClass(d.score||0)}`;
         row.innerHTML = `<div><div class="sym">${d.ticker}</div><div class="sub">${d.cagr_lntt!=null?'CAGR '+fmtPct(d.cagr_lntt):''}</div></div>
           <div class="cell"><div class="score-mini"><div class="score-track"><div class="score-fill" style="width:${fillW}%;background:${clr}"></div></div><span class="score-txt" style="color:${clr}">${d.score||0}/14</span></div></div>
           <div class="cell">${km.roe!=null?fmtPct(km.roe):'—'}</div>
           <div class="cell cell-sm">${km.pe>0?fmt(km.pe,1)+'x':'—'}</div>
           <div class="cell">${km.gross_margin!=null?fmtPct(km.gross_margin):'—'}</div>
-          <div class="cell">${d.price>0?fmt(d.price,1):'—'}</div>`;
+          <div class="cell">${d.price>0?fmt(d.price,1):'—'}</div>
+          <div class="row-actions">
+            <button class="btn-row" onclick="openInBuffett('${d.ticker}')">📊 Cơ bản</button>
+            <button class="btn-row" onclick="openInTechnical('${d.ticker}')">📈 KT</button>
+          </div>`;
         document.getElementById('streamRows')?.appendChild(row);
       };
       es.onerror = () => { es.close(); reject(new Error('Stream lỗi')); };
@@ -1259,6 +1270,12 @@ function openInBuffett(ticker) {
   document.getElementById('maCP').value = ticker;
   showPage('buffett');
   fetchData();
+}
+
+function openInTechnical(ticker) {
+  document.getElementById('taMA').value = ticker;
+  showPage('technical');
+  fetchTA();
 }
 
 // ═══════════════════════════════════════════
