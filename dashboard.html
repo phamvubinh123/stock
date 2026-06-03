@@ -1774,8 +1774,8 @@ async function fetchTA() {
     const l=d.latest;
 
     // Tính bulls/bears trước
-    const bulls=d.signals.filter(s=>s.type==='bull').length;
-    const bears=d.signals.filter(s=>s.type==='bear').length;
+    const bulls=(d.signals||[]).filter(s=>s.type==='bull').length;
+    const bears=(d.signals||[]).filter(s=>s.type==='bear').length;
 
     // Stat grid (vnstock trả về đã là nghìn đồng — không chia thêm)
     document.getElementById('taStats').innerHTML=[
