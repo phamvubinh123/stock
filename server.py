@@ -2496,15 +2496,13 @@ def _radar_sync(username: str) -> dict:
             log.warning(f"Radar {ticker}: {e}")
             return _placeholder(ticker)
 
-    # Scan song song, max 6 mã realtime, timeout tổng 20s
-    cached  = [t for t in watchlist if t in cache_map]
-    realtime = [t for t in watchlist if t not in cache_map][:6]
-    to_scan = cached + realtime
+    # Scan song song toàn bộ watchlist, timeout 60s (3 worker chạy song song)
+    to_scan = list(watchlist)  # tất cả mã, không giới hạn
 
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
         futures = {ex.submit(_scan_one, t): t for t in to_scan}
-        done, not_done = concurrent.futures.wait(futures, timeout=20)
+        done, not_done = concurrent.futures.wait(futures, timeout=60)
         for f in done:
             try: results.append(f.result())
             except: pass

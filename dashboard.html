@@ -1798,6 +1798,7 @@ function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
   return LightweightCharts.createChart(el, {
+    autoSize: true,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
     grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
     crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
@@ -2419,6 +2420,8 @@ async function loadRadarCache() {
 }
 
 function renderRadarTable(results, updatedAt, fromCache) {
+  // Ẩn placeholder "Nhấn Scan" khi đã có kết quả
+  document.getElementById('picksContainer').style.display = 'none';
   const container = document.getElementById('radarContainer');
   const updStr = updatedAt ? updatedAt.slice(0,16).replace('T',' ') : '';
   const scanHint = fromCache ? ' <span style="font-size:.7rem;color:var(--muted)">(nhấn Scan để cập nhật)</span>' : '';
