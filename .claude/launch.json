@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stock-agent",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["/Users/binhpham/Downloads/Projects/final_app/start.sh"],
+      "port": 8000
+    }
+  ]
+}
