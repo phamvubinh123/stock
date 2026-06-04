@@ -720,7 +720,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
             <!-- Hidden placeholders cho backward-compat JS references -->
             <div id="ddFundamental" style="display:none"></div>
             <div id="ddTechnical" style="display:none"></div>
-            <div id="tv-chart-container" style="height:380px;margin:0 -16px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)"></div>
+            <div id="tv-chart-container" style="display:none"></div>
             <div id="ddAIVerdict" style="margin-top:16px;display:none">
               <div style="height:1px;background:var(--border);margin-bottom:14px"></div>
               <div style="font-size:.7rem;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🤖 AI Verdict</div>
@@ -1824,9 +1824,19 @@ async function removeWl(ticker) {
   try {
     const r = await fetch('/api/watchlist/'+ticker, {method:'DELETE', headers: _wlHeaders()});
     const d = await r.json();
-    renderWlTags(d.watchlist || []);
-    // Xóa row tương ứng khỏi bảng radar (không reload)
-    document.querySelector(`#radarContainer tr[data-ticker="${ticker}"]`)?.remove();
+    const remaining = d.watchlist || [];
+    renderWlTags(remaining);
+    if (remaining.length === 0) {
+      // Watchlist trống — xóa toàn bộ bảng, hiện placeholder
+      const rc = document.getElementById('radarContainer');
+      rc.innerHTML = '';
+      rc.style.display = 'none';
+      document.getElementById('picksContainer').style.display = '';
+      document.getElementById('picksContainer').innerHTML =
+        '<div class="empty">Nhập mã cổ phiếu và nhấn <strong>🔍 Scan</strong> để bắt đầu phân tích</div>';
+    } else {
+      document.querySelector(`#radarContainer tr[data-ticker="${ticker}"]`)?.remove();
+    }
   } catch {}
 }
 
@@ -2961,10 +2971,27 @@ async function addTicker(ticker) {
   // Thêm vào watchlist
   await addToWl(t);
 
-  // Đảm bảo bảng radar đang hiện — nếu chưa có thì tạo cấu trúc rỗng
+  // Lấy tbody, nhưng chỉ dùng nếu các rows trong đó là từ scan hiện tại (có data-ticker)
+  // Nếu bảng có rows nhưng không có row cho mã này → có thể là cache cũ → rebuild
   let tbody = document.querySelector('#radarContainer tbody');
-  if (!tbody) {
-    // Tạo bảng trống, không rebuild từ cache
+  if (tbody) {
+    const existingTickers = [...tbody.querySelectorAll('tr[data-ticker]')].map(r => r.dataset.ticker);
+    // Kiểm tra watchlist hiện tại từ tags
+    const wlTags = [...document.querySelectorAll('#wlTags .wl-tag')].map(el => el.textContent.replace('×','').trim());
+    // Nếu có rows không thuộc watchlist → bảng từ cache cũ, rebuild
+    const hasStaleRows = existingTickers.some(et => !wlTags.includes(et));
+    if (hasStaleRows) {
+      // Rebuild bảng chỉ với các mã trong watchlist hiện tại (không scan)
+      const currentWl = wlTags.filter(Boolean);
+      const freshRows = currentWl.map(wt => {
+        const existingRow = tbody.querySelector(`tr[data-ticker="${wt}"]`);
+        return existingRow ? existingRow.outerHTML : radarRow({ticker: wt, not_scanned: true});
+      });
+      renderRadarTable([], null, false);
+      tbody = document.querySelector('#radarContainer tbody');
+      if (tbody) tbody.innerHTML = freshRows.join('');
+    }
+  } else {
     renderRadarTable([], null, false);
     tbody = document.querySelector('#radarContainer tbody');
     if (!tbody) return;
@@ -2973,7 +3000,26 @@ async function addTicker(ticker) {
   // Mã đã có trong bảng rồi → không append nữa
   if (tbody.querySelector(`tr[data-ticker="${t}"]`)) return;
 
-  // Append row loading placeholder xuống cuối — KHÔNG xóa rows cũ
+  // Nếu đã scan (có rows với score), scan mã mới luôn; nếu chưa scan, chỉ thêm placeholder
+  const hasScannedRows = tbody.querySelector('tr[data-ticker] td[style*="combined"]') !== null
+    || [...tbody.querySelectorAll('tr[data-ticker]')].some(r => !r.innerHTML.includes('not_scanned') && !r.innerHTML.includes('Chưa scan') && !r.innerHTML.includes('Đang scan'));
+
+  if (!hasScannedRows) {
+    // Chưa scan lần nào → chỉ thêm "chưa scan" row, không gọi API
+    const placeholder = document.createElement('tr');
+    placeholder.dataset.ticker = t;
+    placeholder.style.borderBottom = '1px solid var(--border)';
+    placeholder.innerHTML = `<td style="padding:9px 8px"><b>${t}</b></td>
+      <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">Chưa scan — nhấn Scan để cập nhật</td>
+      <td style="text-align:center;padding:9px 6px;white-space:nowrap">
+        <button class="btn-row" onclick="openInBuffett('${t}')">📊 Cơ bản</button>
+        <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${t}')">📈 Kỹ thuật</button>
+      </td>`;
+    tbody.appendChild(placeholder);
+    return;
+  }
+
+  // Đã scan rồi → scan mã mới luôn và thêm vào bảng
   const placeholder = document.createElement('tr');
   placeholder.dataset.ticker = t;
   placeholder.style.borderBottom = '1px solid var(--border)';
