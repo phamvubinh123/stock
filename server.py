@@ -850,7 +850,11 @@ async def index():
     html_path = "dashboard.html"
     if os.path.exists(html_path):
         with open(html_path) as f:
-            return f.read()
+            content = f.read()
+        return HTMLResponse(content, headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache", "Expires": "0"
+        })
     return HTMLResponse("<h1>Stock Agent AI — dashboard.html not found</h1>")
 
 
@@ -2483,29 +2487,34 @@ def _radar_sync(username: str) -> dict:
     def _scan_one(ticker):
         if ticker in cache_map:
             return cache_map[ticker]
-        try:
-            scan_r  = scan_one_ticker(ticker)
-            ta_data = compute_technical_sync(ticker)
-            signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
-            return {"ticker": ticker, "signal": signal,
-                    "buffett_score": scan_r.get("score", 0),
-                    "price": (ta_data.get("latest") or {}).get("close"),
-                    "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                    "key_metrics": scan_r.get("key_metrics", {})}
-        except Exception as e:
-            log.warning(f"Radar {ticker}: {e}")
-            return _placeholder(ticker)
+        for attempt in range(3):  # retry 2 lần nếu thất bại
+            try:
+                if attempt > 0:
+                    import time; time.sleep(2 * attempt)
+                scan_r  = scan_one_ticker(ticker)
+                ta_data = compute_technical_sync(ticker)
+                signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+                return {"ticker": ticker, "signal": signal,
+                        "buffett_score": scan_r.get("score", 0),
+                        "price": (ta_data.get("latest") or {}).get("close"),
+                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                        "key_metrics": scan_r.get("key_metrics", {})}
+            except Exception as e:
+                log.warning(f"Radar {ticker} attempt {attempt+1}: {e}")
+        return _placeholder(ticker)
 
-    # Scan song song toàn bộ watchlist, timeout 60s (3 worker chạy song song)
+    # Scan song song toàn bộ watchlist, timeout 90s (2 worker để tránh rate limit)
     to_scan = list(watchlist)  # tất cả mã, không giới hạn
 
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
         futures = {ex.submit(_scan_one, t): t for t in to_scan}
-        done, not_done = concurrent.futures.wait(futures, timeout=60)
+        done, not_done = concurrent.futures.wait(futures, timeout=90)
         for f in done:
             try: results.append(f.result())
-            except: pass
+            except Exception as e:
+                log.warning(f"Future result error: {e}")
+                results.append(_placeholder(futures[f]))
         for f in not_done:
             f.cancel()
             results.append(_placeholder(futures[f]))
@@ -2547,31 +2556,40 @@ async def get_radar(request: Request, cache_only: int = Query(0)):
 
 @app.get("/api/radar/scan-one")
 async def radar_scan_one(ticker: str = Query(...)):
-    """Scan nhanh 1 mã duy nhất — dùng khi thêm mã mới vào watchlist."""
+    """Scan nhanh 1 mã duy nhất — retry 3 lần, tránh rate limit vnstock."""
     ticker = ticker.upper()
-    cache_map = {}
+    # Kiểm tra cache trước
     if os.path.exists(VN30_RADAR_CACHE):
         try:
             with open(VN30_RADAR_CACHE) as f:
                 cache_map = {r["ticker"]: r for r in json.load(f).get("results", [])}
+            if ticker in cache_map:
+                return ok({"result": cache_map[ticker]})
         except: pass
-    if ticker in cache_map:
-        return ok({"result": cache_map[ticker]})
-    try:
-        loop = asyncio.get_running_loop()
-        def _do():
-            scan_r  = scan_one_ticker(ticker)
-            ta_data = compute_technical_sync(ticker)
-            signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
-            return {"ticker": ticker, "signal": signal,
-                    "buffett_score": scan_r.get("score", 0),
-                    "price": (ta_data.get("latest") or {}).get("close"),
-                    "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
-                    "key_metrics": scan_r.get("key_metrics", {})}
-        result = await loop.run_in_executor(None, _do)
-        return ok({"result": result})
-    except Exception as e:
-        raise HTTPException(500, str(e))
+
+    loop = asyncio.get_running_loop()
+    last_err = "Unknown error"
+    for attempt in range(3):
+        try:
+            if attempt > 0:
+                await asyncio.sleep(2 * attempt)  # 2s, 4s delay
+            def _do():
+                import time
+                scan_r  = scan_one_ticker(ticker)
+                time.sleep(0.3)  # nhỏ delay tránh rate limit
+                ta_data = compute_technical_sync(ticker)
+                signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
+                return {"ticker": ticker, "signal": signal,
+                        "buffett_score": scan_r.get("score", 0),
+                        "price": (ta_data.get("latest") or {}).get("close"),
+                        "volume_warning": (ta_data.get("volume_signal") or {}).get("warning"),
+                        "key_metrics": scan_r.get("key_metrics", {})}
+            result = await loop.run_in_executor(None, _do)
+            return ok({"result": result})
+        except Exception as e:
+            last_err = str(e)
+            log.warning(f"scan-one {ticker} attempt {attempt+1}: {e}")
+    raise HTTPException(500, f"{ticker}: {last_err}")
 
 
 # ROUTES — SO SÁNH NGÀNH (Phase 4.3)
