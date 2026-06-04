@@ -137,6 +137,51 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 
 ---
 
+## ✅ ĐÃ LÀM (cập nhật 2026-06-04)
+
+### Scan & Radar
+- `triggerRadar()` **không dùng `/api/radar` batch nữa** — thay bằng scan từng mã riêng qua `/api/radar/scan-one`, 2 mã song song, tránh timeout Railway
+- `/api/radar/scan-one` có retry 3 lần với delay 2s/4s, thêm `time.sleep(0.3)` giữa scan_one_ticker và compute_technical
+- `_radar_sync`: fix `except: pass` → `results.append(_placeholder(futures[f]))` — không drop ticker bị lỗi
+- `_scan_one` retry tăng lên 3 lần, delay 2×attempt giây, `max_workers=2`, timeout=90s
+- Frontend `scanOne`: retry 2 lần tự động, row lỗi có nút **↻ Thử lại**
+- Server trả **no-cache headers** cho `/` → browser luôn load file mới
+
+### Multi-ticker Input
+- `addTickerFromInput()`: split input theo `,` hoặc khoảng trắng → validate từng mã (`/^[A-Z]{2,7}$/`) → add từng cái
+- Mã không hợp lệ báo toast đỏ ngay khi Enter
+- Click autocomplete vẫn dùng `addTicker(sym)` trực tiếp
+
+### Deep Dive Card (Phân tích cơ bản)
+- **Xóa layout 2 cột `deep-grid`** cho stats, thay bằng **`#ddAllStats`** — 1 grid thống nhất
+- CSS: `display:grid !important`, 5 cột (>900px) / 3 cột (≤900px) / 2 cột (≤520px)
+- Stats hiển thị: Buffett Score, P/E, ROE, Biên gộp, DCF, MOS, Giá, RSI, Ichimoku, Volume
+- `loadDeepDive`: retry 2 lần khi fetch technical fail, hiện lỗi rõ ràng thay vì "—"
+
+### TradingView Chart trong Deep Dive
+- Thêm `<div id="tv-chart-container">` vào `deepDiveCard` HTML (trước đây thiếu → chart không render)
+- `loadTVChart` giờ hoạt động đúng khi click từ radar
+
+### Lightweight-charts (tab Kỹ Thuật)
+- `makeChart()` dùng `autoSize: true` thay vì đo `getBoundingClientRect()` → ổn định hơn
+
+### Navigation
+- **Xóa hoàn toàn Danh mục** khỏi sidebar, mobile nav, `GROUP_PAGES`, `GROUP_SUBNAV`, `GROUP_DEFAULT`, `MOB_GROUP`, `subNavDanhMuc`
+- Chỉ còn 2 group: `khampha` (Trang Chủ) và `congthu` (Công Cụ)
+- Mobile bottom nav: chỉ còn 2 nút (Trang Chủ + Công Cụ)
+
+### Header Redesign (giống SSI)
+- Nền tối `#0D1B2A`, height 44px
+- Trái: **đồng hồ real-time** `HH:MM:SS` (update mỗi giây, dùng `startClock()`)
+- Giữa: icons — Hỗ trợ (? + label), Key, Bell (badge đỏ số alert)
+- Phải: separator `|` + icon người + tên tài khoản (set trong `enterApp`)
+- Mobile: icons không hiện label, font nhỏ hơn
+
+### Validator mã CP
+- Regex `/^[A-Z]{2,7}$/` — chỉ chữ cái, 2-7 ký tự
+
+---
+
 ## 🚀 ROADMAP — Làm theo thứ tự
 
 ---
