@@ -570,6 +570,7 @@ def scan_one_ticker(ticker: str) -> dict:
         data = {}
         years = []
 
+        import time as _t
         # Income
         try:
             inc = fin.income_statement(period="year")
@@ -612,6 +613,7 @@ def scan_one_ticker(ticker: str) -> dict:
         for k in ["dt", "lng", "lv", "cpbh", "cpql", "lntt", "lnst", "thue"]:
             if k not in data: data[k] = [0] * n
 
+        _t.sleep(1)  # delay tránh rate limit vnstock
         # Balance
         try:
             bal = fin.balance_sheet(period="year")
@@ -643,6 +645,7 @@ def scan_one_ticker(ticker: str) -> dict:
         for k in ["tien", "htk", "tsnh", "ts", "nnh", "ndh", "vcsh"]:
             if k not in data: data[k] = [0] * n
 
+        _t.sleep(1)  # delay tránh rate limit vnstock
         # PE from ratio
         try:
             ratio = fin.ratio(period="year")
@@ -2567,16 +2570,28 @@ async def radar_scan_one(ticker: str = Query(...)):
                 return ok({"result": cache_map[ticker]})
         except: pass
 
+    import re as _re
+
+    def _parse_wait(err_str: str) -> int:
+        """Trích xuất số giây cần chờ từ thông báo rate limit của vnstock."""
+        m = _re.search(r"Chờ (\d+) giây|Wait (\d+) second", err_str)
+        if m:
+            return int(m.group(1) or m.group(2)) + 2
+        return 0
+
     loop = asyncio.get_running_loop()
     last_err = "Unknown error"
-    for attempt in range(3):
+    is_rate_limited = False
+    retry_after = 0
+
+    for attempt in range(2):
         try:
             if attempt > 0:
-                await asyncio.sleep(2 * attempt)  # 2s, 4s delay
+                await asyncio.sleep(3)
             def _do():
-                import time
+                import time as _t2
                 scan_r  = scan_one_ticker(ticker)
-                time.sleep(0.3)  # nhỏ delay tránh rate limit
+                _t2.sleep(1.5)  # delay giữa BCTC và technical
                 ta_data = compute_technical_sync(ticker)
                 signal  = calc_combined_signal(scan_r.get("score", 0), ta_data)
                 return {"ticker": ticker, "signal": signal,
@@ -2586,10 +2601,24 @@ async def radar_scan_one(ticker: str = Query(...)):
                         "key_metrics": scan_r.get("key_metrics", {})}
             result = await loop.run_in_executor(None, _do)
             return ok({"result": result})
-        except Exception as e:
+        except BaseException as e:
             last_err = str(e)
-            log.warning(f"scan-one {ticker} attempt {attempt+1}: {e}")
-    raise HTTPException(500, f"{ticker}: {last_err}")
+            wait = _parse_wait(last_err)
+            if wait > 0:
+                is_rate_limited = True
+                retry_after = wait
+                log.warning(f"scan-one {ticker}: rate limited, retry_after={wait}s")
+                break  # không retry — báo client chờ đúng thời gian
+            log.warning(f"scan-one {ticker} attempt {attempt+1}: {type(e).__name__}: {last_err[:80]}")
+
+    if is_rate_limited:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "rate_limited", "retry_after": retry_after, "ticker": ticker},
+            headers={"Retry-After": str(retry_after)},
+        )
+    raise HTTPException(500, f"{ticker}: {last_err[:200]}")
 
 
 # ROUTES — SO SÁNH NGÀNH (Phase 4.3)
