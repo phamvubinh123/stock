@@ -3022,7 +3022,12 @@ async function addTicker(ticker) {
   // Thêm vào watchlist server
   await addToWl(t);
 
-  // Đảm bảo bảng đang hiện
+  if (_scanState === 'idle') {
+    // Chưa scan lần nào → chỉ lưu watchlist, giữ nguyên prompt "Nhấn Scan"
+    return;
+  }
+
+  // Đã scan trước đó → thêm vào bảng và scan ngay
   let tbody = document.querySelector('#radarContainer tbody');
   if (!tbody) {
     renderRadarTable([], null, false);
@@ -3033,21 +3038,7 @@ async function addTicker(ticker) {
   // Mã đã có row rồi → không làm gì thêm
   if (tbody.querySelector(`tr[data-ticker="${t}"]`)) return;
 
-  if (_scanState === 'idle') {
-    // Chưa scan lần nào → chỉ thêm row "Chưa scan", không gọi API
-    const tr = document.createElement('tr');
-    tr.dataset.ticker = t;
-    tr.style.borderBottom = '1px solid var(--border)';
-    tr.innerHTML = `<td style="padding:9px 8px"><b>${t}</b></td>
-      <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">
-        Chưa scan — nhấn <strong>🔍 Scan</strong> để cập nhật
-      </td>
-      <td style="text-align:center;padding:9px 6px;white-space:nowrap">
-        <button class="btn-row" onclick="openInBuffett('${t}')">📊 Cơ bản</button>
-        <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${t}')">📈 Kỹ thuật</button>
-      </td>`;
-    tbody.appendChild(tr);
-  } else {
+  {
     // Đã scan trước đó → scan ngay mã mới và thêm kết quả vào bảng
     const tr = document.createElement('tr');
     tr.dataset.ticker = t;
