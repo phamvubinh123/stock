@@ -944,6 +944,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
           <div id="taLoadMsg" style="display:none;padding:10px 0 2px;font-size:.8rem;color:var(--muted);text-align:center"></div>
         </div>
         <div id="taResult" style="display:none">
+          <div class="card">
+            <div class="card-title">Tín hiệu</div>
+            <div id="taSignals"></div>
+          </div>
           <div class="card" style="padding-bottom:0">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div class="card-title" style="margin:0" id="taChartTitle">—</div>
@@ -953,11 +957,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
             <div id="chartRsi" style="height:110px;margin-top:6px;border-radius:8px;overflow:hidden"></div>
             <div id="chartMacd" style="height:110px;margin-top:6px;margin-bottom:12px;border-radius:8px;overflow:hidden"></div>
           </div>
-          <div class="card"><div class="stat-grid" id="taStats"></div></div>
-          <div class="card">
-            <div class="card-title">Tín hiệu</div>
-            <div id="taSignals"></div>
-          </div>
+          <div id="taStats" style="display:none"></div>
         </div>
       </div>
 
@@ -1911,7 +1911,7 @@ async function fetchTA() {
 
   // Show taResult immediately với loading placeholder — không để trang trắng
   document.getElementById('taChartTitle').textContent=ma;
-  document.getElementById('taStats').innerHTML='<div style="grid-column:1/-1;color:var(--muted);font-size:.82rem;padding:8px;text-align:center"><span class="spinner"></span> Đang tải dữ liệu...</div>';
+  document.getElementById('taSignals').innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:8px;text-align:center"><span class="spinner"></span> Đang tải dữ liệu...</div>';
   document.getElementById('taSignals').innerHTML='';
   document.getElementById('taResult').style.display='block';
 
@@ -1932,16 +1932,6 @@ async function fetchTA() {
     // Tính bulls/bears trước
     const bulls=(d.signals||[]).filter(s=>s.type==='bull').length;
     const bears=(d.signals||[]).filter(s=>s.type==='bear').length;
-
-    // Stat grid (vnstock trả về đã là nghìn đồng — không chia thêm)
-    document.getElementById('taStats').innerHTML=[
-      {v:l.close?fmt(l.close,1)+'k':'—',l:'Giá',cls:''},
-      {v:l.rsi?fmt(l.rsi,1):'—',l:'RSI',cls:l.rsi<30?'cg':l.rsi>70?'cr':'cy'},
-      {v:l.macd?fmt(l.macd,2):'—',l:'MACD',cls:l.macd>l.macd_signal?'cg':'cr'},
-      {v:l.ma20?fmt(l.ma20,1)+'k':'—',l:'MA20',cls:''},
-      {v:l.ma50?fmt(l.ma50,1)+'k':'—',l:'MA50',cls:''},
-      {v:`▲${bulls} ▼${bears}`,l:'Tín hiệu',cls:bulls>bears?'cg':bears>bulls?'cr':''},
-    ].map(s=>`<div class="stat"><div class="stat-val ${s.cls}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
 
     // Signals
     const sigColors={bull:{bg:'var(--green-bg)',fg:'var(--green)',icon:'▲'},bear:{bg:'var(--red-bg)',fg:'var(--red)',icon:'▼'},neutral:{bg:'#f5f5f5',fg:'var(--muted)',icon:'●'}};
@@ -2059,7 +2049,7 @@ async function fetchTA() {
     console.error('fetchTA error:', e);
     destroyCharts();
     // taResult đã visible từ đầu, chỉ cần update nội dung với error
-    document.getElementById('taStats').innerHTML=`<div style="grid-column:1/-1;color:var(--red);font-size:.85rem;padding:12px">⚠ ${e.message||'Lỗi không xác định'}</div>`;
+    document.getElementById('taSignals').innerHTML=`<div style="color:var(--red);font-size:.85rem;padding:12px">⚠ ${e.message||'Lỗi không xác định'}</div>`;
     document.getElementById('taSignals').innerHTML='';
   }
 }
