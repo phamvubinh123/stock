@@ -208,12 +208,14 @@ def safe_int(val, default=0):
 # ─────────────────────────────────────────────
 # WATCHLIST HELPERS
 # ─────────────────────────────────────────────
+MAX_WATCHLIST = 5
+
 def load_watchlist(username: str = "default") -> List[str]:
     if USE_DB:
         try:
             rows = db_exec("SELECT ticker FROM watchlists WHERE username=%s ORDER BY position", (username,), fetch="all")
             if rows is not None:
-                tickers = [r["ticker"] for r in rows]
+                tickers = [r["ticker"] for r in rows][:MAX_WATCHLIST]
                 return tickers if tickers else list(VN30_TOP10)
         except Exception as e:
             log.warning(f"DB load_watchlist error: {e}")
@@ -221,7 +223,7 @@ def load_watchlist(username: str = "default") -> List[str]:
         try:
             with open(WATCHLIST_FILE) as f:
                 data = json.load(f)
-                return data if data else list(VN30_TOP10)
+                return (data if data else list(VN30_TOP10))[:MAX_WATCHLIST]
         except:
             pass
     return list(VN30_TOP10)
@@ -897,7 +899,7 @@ def get_watchlist(request: Request):
 
 @app.post("/api/watchlist")
 async def set_watchlist(request: Request, body: dict = Body(...)):
-    symbols = [s.upper().strip() for s in body.get("symbols", []) if s.strip()]
+    symbols = [s.upper().strip() for s in body.get("symbols", []) if s.strip()][:MAX_WATCHLIST]
     if not symbols:
         raise HTTPException(400, "Cần ít nhất 1 mã")
     save_watchlist(symbols, get_username(request))
