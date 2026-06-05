@@ -1205,10 +1205,14 @@ function showSubPage(group, pageId, tabEl) {
   const navId = GROUP_SUBNAV[group];
   if (navId) document.querySelectorAll(`#${navId} .page-sub-tab`).forEach(t => t.classList.remove('active'));
   if (tabEl) tabEl.classList.add('active');
-  // Auto-fetch nếu đã có mã — an toàn vì fetchTA show taResult ngay từ đầu
+  // Auto-fetch khi chuyển tab nếu đã có mã
   if (pageId === 'technical') {
     const ma = document.getElementById('taMA')?.value?.trim();
     if (ma) fetchTA();
+  }
+  if (pageId === 'buffett') {
+    const ma = document.getElementById('maCP')?.value?.trim();
+    if (ma) fetchData();
   }
 }
 
@@ -3017,7 +3021,7 @@ async function addTicker(ticker) {
   // Kiểm tra giới hạn 5 mã
   const currentWl = [...document.querySelectorAll('#wlTags .wl-tag')].map(el => el.textContent.replace('×','').trim());
   if (!currentWl.includes(t) && currentWl.length >= 5) {
-    showToast('⚠ Vui lòng nhập tối đa 5 mã', 'error');
+    showToast('⚠ Vui lòng chỉ nhập tối đa 5 mã', 'error');
     return;
   }
 
