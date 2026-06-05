@@ -1837,12 +1837,11 @@ async function removeWl(ticker) {
     const d = await r.json();
     const remaining = d.watchlist || [];
     renderWlTags(remaining);
-    if (remaining.length === 0) {
+    // Chỉ xóa row radar, KHÔNG reset scanState hay clear UI khi đang scan
+    document.querySelector(`#radarContainer tr[data-ticker="${ticker}"]`)?.remove();
+    if (remaining.length === 0 && _scanState !== 'scanning') {
       _scanState = 'idle';
-      document.getElementById('radarContainer').innerHTML = '';
       _showEmptyPrompt('Nhập mã cổ phiếu và nhấn <strong>🔍 Scan</strong> để bắt đầu phân tích');
-    } else {
-      document.querySelector(`#radarContainer tr[data-ticker="${ticker}"]`)?.remove();
     }
   } catch {}
 }
@@ -1924,31 +1923,36 @@ async function fetchTA() {
   prog.classList.add('show'); msg.style.display='block';
   let mi=0; msg.textContent=TA_MSGS[mi];
   const taInterval=setInterval(()=>{ mi=(mi+1)%TA_MSGS.length; msg.textContent=TA_MSGS[mi]; },900);
+
+  const _done = () => {
+    clearInterval(taInterval);
+    prog.classList.remove('show'); msg.style.display='none';
+    btn.disabled=false; btn.textContent='Phân tích';
+  };
+
+  let d;
   try {
     const r=await fetch(`/api/technical/${ma}?period=${period}`, {headers:{'X-Token':authToken}});
-    let d;
     try { d=await r.json(); } catch(_) { throw new Error('Server lỗi — vui lòng thử lại'); }
-    clearInterval(taInterval); prog.classList.remove('show'); msg.style.display='none';
-    btn.disabled=false; btn.textContent='Phân tích';
+    _done();
     if(!r.ok) throw new Error(d.detail||'Lỗi tải dữ liệu kỹ thuật');
-    const hist=d.history||[];
-    const l=d.latest;
+  } catch(e) {
+    _done();
+    document.getElementById('taSignals').innerHTML=`<div style="color:var(--red);font-size:.85rem;padding:12px">⚠ ${e.message||'Lỗi không xác định'}</div>`;
+    showToast('⚠ Kỹ thuật: ' + (e.message||'Lỗi'), 'error');
+    return;
+  }
 
-    // Tính bulls/bears trước
-    const bulls=(d.signals||[]).filter(s=>s.type==='bull').length;
-    const bears=(d.signals||[]).filter(s=>s.type==='bear').length;
-
-    // Signals
-    const sigColors={bull:{bg:'var(--green-bg)',fg:'var(--green)',icon:'▲'},bear:{bg:'var(--red-bg)',fg:'var(--red)',icon:'▼'},neutral:{bg:'#f5f5f5',fg:'var(--muted)',icon:'●'}};
-    document.getElementById('taSignals').innerHTML=(d.signals||[]).length
-      ?(d.signals||[]).map(s=>{
-        const c=sigColors[s.type]||sigColors.neutral;
-        return `<div style="padding:8px 12px;background:${c.bg};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${c.fg};display:flex;gap:8px;align-items:center"><span>${c.icon}</span><span>${s.text||s}</span></div>`;
-      }).join('')
-      :'<div class="empty" style="padding:20px">Không có tín hiệu</div>';
-
-    document.getElementById('taChartTitle').textContent=ma;
-    document.getElementById('taResult').style.display='block';
+  // ── Render signals (luôn hiện dù chart lỗi)
+  const hist=d.history||[];
+  const sigColors={bull:{bg:'var(--green-bg)',fg:'var(--green)',icon:'▲'},bear:{bg:'var(--red-bg)',fg:'var(--red)',icon:'▼'},neutral:{bg:'#f5f5f5',fg:'var(--muted)',icon:'●'}};
+  document.getElementById('taSignals').innerHTML=(d.signals||[]).length
+    ?(d.signals||[]).map(s=>{
+      const c=sigColors[s.type]||sigColors.neutral;
+      return `<div style="padding:8px 12px;background:${c.bg};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${c.fg};display:flex;gap:8px;align-items:center"><span>${c.icon}</span><span>${s.text||s}</span></div>`;
+    }).join('')
+    :'<div class="empty" style="padding:20px">Không có tín hiệu</div>';
+  document.getElementById('taChartTitle').textContent=ma;
 
     // Build chart data — dedup theo ngày (giữ row cuối cùng mỗi ngày)
     const byDate={};
@@ -1971,80 +1975,54 @@ async function fetchTA() {
       if(row.macd_hist!=null) histData.push({time:t,value:row.macd_hist,color:row.macd_hist>=0?'rgba(38,166,154,0.7)':'rgba(239,83,80,0.7)'});
     });
 
+  // ── Vẽ chart (try riêng, không ảnh hưởng signals nếu lỗi)
+  try {
     destroyCharts();
+    await new Promise(res => setTimeout(res, 80));
 
-    // Đợi DOM paint xong
-    await new Promise(res => setTimeout(res, 50));
-
-    // ── Chart 1: Candlestick + Volume + MA20 + MA50
     _chartCandle = makeChart('chartCandle');
-    const candleSeries = _chartCandle.addCandlestickSeries({
-      upColor:'#26a69a', downColor:'#ef5350', borderVisible:false,
-      wickUpColor:'#26a69a', wickDownColor:'#ef5350',
-    });
+    const candleSeries = _chartCandle.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});
     candleSeries.setData(candleData);
-
-    const volSeries = _chartCandle.addHistogramSeries({
-      priceFormat:{type:'volume'}, priceScaleId:'vol',
-    });
+    const volSeries = _chartCandle.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'vol'});
     try { _chartCandle.priceScale('vol').applyOptions({scaleMargins:{top:0.8,bottom:0}}); } catch(_){}
     volSeries.setData(volData);
-
     const ma20Series = _chartCandle.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'MA20'});
     ma20Series.setData(ma20Data);
     const ma50Series = _chartCandle.addLineSeries({color:'#6366f1',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'MA50'});
     ma50Series.setData(ma50Data);
     try {
-      const bbUpSeries = _chartCandle.addAreaSeries({lineColor:'rgba(99,102,241,0.4)',lineWidth:1,topColor:'rgba(99,102,241,0.08)',bottomColor:'rgba(99,102,241,0.08)',priceLineVisible:false,lastValueVisible:false});
-      bbUpSeries.setData(bbUpData);
-      const bbLoSeries = _chartCandle.addAreaSeries({lineColor:'rgba(99,102,241,0.4)',lineWidth:1,topColor:'rgba(255,255,255,0.95)',bottomColor:'rgba(255,255,255,0.95)',priceLineVisible:false,lastValueVisible:false});
-      bbLoSeries.setData(bbLoData);
+      _chartCandle.addAreaSeries({lineColor:'rgba(99,102,241,0.4)',lineWidth:1,topColor:'rgba(99,102,241,0.08)',bottomColor:'rgba(99,102,241,0.08)',priceLineVisible:false,lastValueVisible:false}).setData(bbUpData);
+      _chartCandle.addAreaSeries({lineColor:'rgba(99,102,241,0.4)',lineWidth:1,topColor:'rgba(255,255,255,0.95)',bottomColor:'rgba(255,255,255,0.95)',priceLineVisible:false,lastValueVisible:false}).setData(bbLoData);
     } catch(_){}
 
-    // ── Chart 2: RSI
     _chartRsi = makeChart('chartRsi', {rightPriceScale:{scaleMargins:{top:0.1,bottom:0.1}}});
     const rsiSeries = _chartRsi.addLineSeries({color:'#8b5cf6',lineWidth:2,priceLineVisible:false,lastValueVisible:true});
     rsiSeries.setData(rsiData);
     try { rsiSeries.createPriceLine({price:70,color:'#ef5350',lineWidth:1,lineStyle:2,title:'70'}); } catch(_){}
     try { rsiSeries.createPriceLine({price:30,color:'#26a69a',lineWidth:1,lineStyle:2,title:'30'}); } catch(_){}
 
-    // ── Chart 3: MACD
     _chartMacd = makeChart('chartMacd');
-    const histSeries = _chartMacd.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});
-    histSeries.setData(histData);
-    const macdLineSeries = _chartMacd.addLineSeries({color:'#2563eb',lineWidth:2,priceLineVisible:false,lastValueVisible:true});
-    macdLineSeries.setData(macdData);
+    _chartMacd.addHistogramSeries({priceLineVisible:false,lastValueVisible:false}).setData(histData);
+    _chartMacd.addLineSeries({color:'#2563eb',lineWidth:2,priceLineVisible:false,lastValueVisible:true}).setData(macdData);
     const signalLineSeries = _chartMacd.addLineSeries({color:'#f97316',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
     signalLineSeries.setData(signalData);
 
-    [_chartCandle, _chartRsi, _chartMacd].forEach(c => { try { c.timeScale().fitContent(); } catch(_){} });
-
-    const allCharts=[_chartCandle,_chartRsi,_chartMacd];
-    allCharts.forEach(src=>{
+    [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c.timeScale().fitContent();}catch(_){}});
+    [_chartCandle,_chartRsi,_chartMacd].forEach(src=>{
       src.timeScale().subscribeVisibleLogicalRangeChange(range=>{
         if(!range) return;
-        allCharts.forEach(dst=>{if(dst!==src) dst.timeScale().setVisibleLogicalRange(range);});
+        [_chartCandle,_chartRsi,_chartMacd].forEach(dst=>{if(dst!==src)try{dst.timeScale().setVisibleLogicalRange(range);}catch(_){}});
       });
     });
-
     const hoverEl=document.getElementById('taHoverInfo');
     _chartCandle.subscribeCrosshairMove(param=>{
       if(!param.time||!param.seriesData) return;
       const c=param.seriesData.get(candleSeries);
       if(c) hoverEl.innerHTML=`<b>${param.time}</b> &nbsp; O:${fmt(c.open,2)} H:${fmt(c.high,2)} L:${fmt(c.low,2)} C:<b>${fmt(c.close,2)}</b>k`;
     });
-
-  } catch(e){
-    clearInterval(taInterval);
-    document.getElementById('taProgBar').classList.remove('show');
-    document.getElementById('taLoadMsg').style.display='none';
-    document.getElementById('btnTA').disabled=false;
-    document.getElementById('btnTA').textContent='Phân tích';
-    console.error('fetchTA error:', e);
-    destroyCharts();
-    const errMsg = e.message || 'Lỗi không xác định';
-    document.getElementById('taSignals').innerHTML=`<div style="color:var(--red);font-size:.85rem;padding:12px">⚠ ${errMsg}</div>`;
-    showToast('⚠ Kỹ thuật: ' + errMsg, 'error');
+  } catch(chartErr) {
+    console.error('Chart render error:', chartErr);
+    // Signals đã hiện rồi, chỉ log lỗi chart — không overwrite signals
   }
 }
 
