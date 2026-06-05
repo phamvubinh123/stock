@@ -578,7 +578,8 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
         <span class="hdr-account-name" id="hdrUsername">Tài khoản</span>
       </div>
     </header>
-
+    <!-- Toast anchor: sticky dưới header, nằm trong cột app-right -->
+    <div id="toastAnchor" style="position:sticky;top:44px;height:0;overflow:visible;text-align:right;padding-right:14px;z-index:500;pointer-events:none"></div>
 
     <!-- Sub-navs -->
     <nav class="page-sub-nav" id="subNavKhamPha">
@@ -1801,10 +1802,15 @@ function analyze() {
 const _wlHeaders = () => ({'Content-Type':'application/json','X-Token':authToken});
 
 async function loadWatchlist() {
+  // Hiện ngay từ cache trước khi API trả về
+  const cached = localStorage.getItem('wl_cache');
+  if (cached) try { renderWlTags(JSON.parse(cached)); } catch {}
   try {
     const r = await fetch('/api/watchlist', {headers: _wlHeaders()});
     const d = await r.json();
-    renderWlTags(d.watchlist || []);
+    const wl = d.watchlist || [];
+    localStorage.setItem('wl_cache', JSON.stringify(wl));
+    renderWlTags(wl);
   } catch {}
 }
 function renderWlTags(wl) {
@@ -2392,8 +2398,9 @@ function showToast(msg, type='info') {
   if (!t) {
     t = document.createElement('div');
     t.id = 'toastEl';
-    t.style.cssText='position:fixed;top:52px;right:16px;padding:10px 16px;border-radius:10px;font-size:.83rem;font-weight:500;z-index:9999;transition:opacity .3s;box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:300px';
-    document.body.appendChild(t);
+    t.style.cssText='display:inline-block;pointer-events:auto;margin-top:8px;padding:10px 16px;border-radius:10px;font-size:.83rem;font-weight:500;transition:opacity .3s;box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:300px;text-align:left';
+    const anchor = document.getElementById('toastAnchor') || document.body;
+    anchor.appendChild(t);
   }
   t.style.background = type==='warning'?'#fef3c7':type==='error'?'var(--red-bg)':'var(--green-bg)';
   t.style.color = type==='warning'?'#92400e':type==='error'?'var(--red)':'var(--green)';
