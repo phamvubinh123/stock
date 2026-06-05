@@ -127,6 +127,11 @@ def init_db():
         last_checked TIMESTAMP,
         created_at   TIMESTAMP DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+        token      VARCHAR(100) PRIMARY KEY,
+        username   VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+        expires_at TIMESTAMP NOT NULL
+    );
     """
     conn = get_conn()
     try:
@@ -215,18 +220,17 @@ def load_watchlist(username: str = "default") -> List[str]:
         try:
             rows = db_exec("SELECT ticker FROM watchlists WHERE username=%s ORDER BY position", (username,), fetch="all")
             if rows is not None:
-                tickers = [r["ticker"] for r in rows][:MAX_WATCHLIST]
-                return tickers if tickers else list(VN30_TOP10)
+                return [r["ticker"] for r in rows][:MAX_WATCHLIST]
         except Exception as e:
             log.warning(f"DB load_watchlist error: {e}")
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE) as f:
                 data = json.load(f)
-                return (data if data else list(VN30_TOP10))[:MAX_WATCHLIST]
+                return (data or [])[:MAX_WATCHLIST]
         except:
             pass
-    return list(VN30_TOP10)
+    return []
 
 
 def save_watchlist(symbols: List[str], username: str = "default"):
@@ -1931,7 +1935,7 @@ def debug_ticker(ticker: str):
 # AUTH — PIN 4 số, lưu users.json
 # ─────────────────────────────────────────────
 USERS_FILE = "users.json"
-SESSIONS: dict = {}  # token -> username (in-memory, reset khi restart)
+SESSIONS: dict = {}  # token -> username (in-memory cache, backed by DB)
 
 
 def load_users() -> dict:
@@ -1967,7 +1971,18 @@ def save_users(users: dict):
 
 def get_current_user(request: Request) -> str:
     token = request.cookies.get("sa_token") or request.headers.get("X-Token", "")
+    if not token:
+        raise HTTPException(401, "Chưa đăng nhập")
     user = SESSIONS.get(token)
+    if not user and USE_DB:
+        # Lookup DB khi SESSIONS bị clear (server restart)
+        try:
+            row = db_exec("SELECT username FROM sessions WHERE token=%s AND expires_at > NOW()", (token,), fetch="one")
+            if row:
+                user = row["username"]
+                SESSIONS[token] = user  # restore vào cache
+        except Exception as e:
+            log.warning(f"DB session lookup error: {e}")
     if not user:
         raise HTTPException(401, "Chưa đăng nhập")
     return user
@@ -1999,6 +2014,13 @@ async def login(body: dict = Body(...)):
     import secrets
     token = secrets.token_hex(24)
     SESSIONS[token] = username
+    if USE_DB:
+        try:
+            expires = datetime.datetime.now() + datetime.timedelta(days=7)
+            db_exec("INSERT INTO sessions (token,username,expires_at) VALUES (%s,%s,%s) ON CONFLICT (token) DO UPDATE SET expires_at=%s",
+                    (token, username, expires, expires))
+        except Exception as e:
+            log.warning(f"DB save session error: {e}")
     resp = ok({"ok": True, "username": username, "token": token})
     resp.set_cookie("sa_token", token, httponly=True, samesite="lax", max_age=86400 * 7)
     return resp
@@ -2008,6 +2030,11 @@ async def login(body: dict = Body(...)):
 async def logout(request: Request):
     token = request.cookies.get("sa_token", "")
     SESSIONS.pop(token, None)
+    if USE_DB and token:
+        try:
+            db_exec("DELETE FROM sessions WHERE token=%s", (token,))
+        except Exception as e:
+            log.warning(f"DB delete session error: {e}")
     resp = ok({"ok": True})
     resp.delete_cookie("sa_token")
     return resp

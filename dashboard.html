@@ -1802,15 +1802,10 @@ function analyze() {
 const _wlHeaders = () => ({'Content-Type':'application/json','X-Token':authToken});
 
 async function loadWatchlist() {
-  // Hiện ngay từ cache trước khi API trả về
-  const cached = localStorage.getItem('wl_cache');
-  if (cached) try { renderWlTags(JSON.parse(cached)); } catch {}
   try {
     const r = await fetch('/api/watchlist', {headers: _wlHeaders()});
     const d = await r.json();
-    const wl = d.watchlist || [];
-    localStorage.setItem('wl_cache', JSON.stringify(wl));
-    renderWlTags(wl);
+    renderWlTags(d.watchlist || []);
   } catch {}
 }
 function renderWlTags(wl) {
@@ -1821,13 +1816,14 @@ function renderWlTags(wl) {
   ).join('');
 }
 async function addToWl(ticker) {
-  const t = (ticker || document.getElementById('wlInput')?.value || '').trim().toUpperCase();
+  const t = (ticker || '').trim().toUpperCase();
   if (!t) return;
   const inp = document.getElementById('wlInput');
   if (inp) inp.value = '';
   try {
     const r = await fetch('/api/watchlist/add', {method:'POST', headers: _wlHeaders(), body: JSON.stringify({ticker: t})});
     const d = await r.json();
+    if (!r.ok) { showToast(d.detail || 'Lỗi thêm mã', 'error'); return; }
     renderWlTags(d.watchlist || []);
   } catch(e) { console.error('addToWl:', e); }
 }
