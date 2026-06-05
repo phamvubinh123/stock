@@ -535,9 +535,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   <nav class="bottom-nav" id="sidebarNav">
     <div class="sidebar-logo">📈 Stock Agent <span>AI</span></div>
 
-    <button class="nav-item active" data-group="khampha" onclick="showGroup('khampha')">
+    <button class="nav-item active" data-group="khampha" onclick="showGroup('khampha')" style="position:relative">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       🏠 Trang Chủ
+      <span id="scanNavBadge" style="display:none;margin-left:auto;font-size:.65rem;background:var(--purple);color:#fff;padding:2px 7px;border-radius:10px;white-space:nowrap"><span class="spinner" style="width:8px;height:8px;border-width:1.5px"></span> Scanning</span>
     </button>
     <button class="nav-item" data-group="congthu" onclick="showGroup('congthu')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
@@ -2459,6 +2460,11 @@ const ACTION_CONFIG = {
 let _scanState = 'idle'; // 'idle' | 'scanning' | 'done'
 let _scanQueue = [];     // tickers thêm trong lúc đang scan
 
+function _setScanBadge(show) {
+  const b = document.getElementById('scanNavBadge');
+  if (b) b.style.display = show ? 'inline-flex' : 'none';
+}
+
 // Hiện/ẩn radarContainer, ẩn/hiện picks placeholder
 function _showRadar(show) {
   const rc = document.getElementById('radarContainer');
@@ -2563,6 +2569,7 @@ async function triggerRadar() {
 
   _scanQueue = [];
   _scanState = 'scanning';
+  _setScanBadge(true);
   try {
     // 1. Lấy watchlist từ server
     const wlR = await fetch('/api/watchlist', { headers: {'X-Token': authToken} });
@@ -2658,6 +2665,7 @@ async function triggerRadar() {
   } finally {
     btn.disabled = false; btn.innerHTML = '🔍 Scan';
     prog.classList.remove('show'); pmsg.style.display = 'none';
+    _setScanBadge(false); // ẩn badge khi scan xong
   }
 }
 
