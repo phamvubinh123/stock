@@ -1973,8 +1973,8 @@ async function fetchTA() {
 
     destroyCharts();
 
-    // Dùng rAF để đảm bảo DOM đã paint xong trước khi đọc kích thước chart
-    await new Promise(r => requestAnimationFrame(r));
+    // Đợi DOM paint xong
+    await new Promise(res => setTimeout(res, 50));
 
     // ── Chart 1: Candlestick + Volume + MA20 + MA50
     _chartCandle = makeChart('chartCandle');
@@ -1994,19 +1994,10 @@ async function fetchTA() {
     ma20Series.setData(ma20Data);
     const ma50Series = _chartCandle.addLineSeries({color:'#6366f1',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'MA50'});
     ma50Series.setData(ma50Data);
-    // BB bands
     try {
-      const bbUpSeries = _chartCandle.addAreaSeries({
-        lineColor:'rgba(99,102,241,0.4)', lineWidth:1,
-        topColor:'rgba(99,102,241,0.08)', bottomColor:'rgba(99,102,241,0.08)',
-        priceLineVisible:false, lastValueVisible:false,
-      });
+      const bbUpSeries = _chartCandle.addAreaSeries({lineColor:'rgba(99,102,241,0.4)',lineWidth:1,topColor:'rgba(99,102,241,0.08)',bottomColor:'rgba(99,102,241,0.08)',priceLineVisible:false,lastValueVisible:false});
       bbUpSeries.setData(bbUpData);
-      const bbLoSeries = _chartCandle.addAreaSeries({
-        lineColor:'rgba(99,102,241,0.4)', lineWidth:1,
-        topColor:'rgba(255,255,255,0.95)', bottomColor:'rgba(255,255,255,0.95)',
-        priceLineVisible:false, lastValueVisible:false,
-      });
+      const bbLoSeries = _chartCandle.addAreaSeries({lineColor:'rgba(99,102,241,0.4)',lineWidth:1,topColor:'rgba(255,255,255,0.95)',bottomColor:'rgba(255,255,255,0.95)',priceLineVisible:false,lastValueVisible:false});
       bbLoSeries.setData(bbLoData);
     } catch(_){}
 
@@ -2014,8 +2005,8 @@ async function fetchTA() {
     _chartRsi = makeChart('chartRsi', {rightPriceScale:{scaleMargins:{top:0.1,bottom:0.1}}});
     const rsiSeries = _chartRsi.addLineSeries({color:'#8b5cf6',lineWidth:2,priceLineVisible:false,lastValueVisible:true});
     rsiSeries.setData(rsiData);
-    rsiSeries.createPriceLine({price:70,color:'#ef5350',lineWidth:1,lineStyle:2,title:'70'});
-    rsiSeries.createPriceLine({price:30,color:'#26a69a',lineWidth:1,lineStyle:2,title:'30'});
+    try { rsiSeries.createPriceLine({price:70,color:'#ef5350',lineWidth:1,lineStyle:2,title:'70'}); } catch(_){}
+    try { rsiSeries.createPriceLine({price:30,color:'#26a69a',lineWidth:1,lineStyle:2,title:'30'}); } catch(_){}
 
     // ── Chart 3: MACD
     _chartMacd = makeChart('chartMacd');
@@ -2026,10 +2017,8 @@ async function fetchTA() {
     const signalLineSeries = _chartMacd.addLineSeries({color:'#f97316',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
     signalLineSeries.setData(signalData);
 
-    // fitContent sau khi set data để đảm bảo charts hiện đủ dữ liệu
     [_chartCandle, _chartRsi, _chartMacd].forEach(c => { try { c.timeScale().fitContent(); } catch(_){} });
 
-    // Sync crosshair + timeScale
     const allCharts=[_chartCandle,_chartRsi,_chartMacd];
     allCharts.forEach(src=>{
       src.timeScale().subscribeVisibleLogicalRangeChange(range=>{
@@ -2038,15 +2027,12 @@ async function fetchTA() {
       });
     });
 
-    // Hover tooltip
     const hoverEl=document.getElementById('taHoverInfo');
     _chartCandle.subscribeCrosshairMove(param=>{
       if(!param.time||!param.seriesData) return;
       const c=param.seriesData.get(candleSeries);
       if(c) hoverEl.innerHTML=`<b>${param.time}</b> &nbsp; O:${fmt(c.open,2)} H:${fmt(c.high,2)} L:${fmt(c.low,2)} C:<b>${fmt(c.close,2)}</b>k`;
     });
-
-    _chartCandle.timeScale().fitContent();
 
   } catch(e){
     clearInterval(taInterval);
@@ -2056,8 +2042,9 @@ async function fetchTA() {
     document.getElementById('btnTA').textContent='Phân tích';
     console.error('fetchTA error:', e);
     destroyCharts();
-    // taResult đã visible từ đầu, chỉ cần update nội dung với error
-    document.getElementById('taSignals').innerHTML=`<div style="color:var(--red);font-size:.85rem;padding:12px">⚠ ${e.message||'Lỗi không xác định'}</div>`;
+    const errMsg = e.message || 'Lỗi không xác định';
+    document.getElementById('taSignals').innerHTML=`<div style="color:var(--red);font-size:.85rem;padding:12px">⚠ ${errMsg}</div>`;
+    showToast('⚠ Kỹ thuật: ' + errMsg, 'error');
   }
 }
 
