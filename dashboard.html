@@ -1918,7 +1918,6 @@ async function fetchTA() {
   // Show taResult immediately với loading placeholder — không để trang trắng
   document.getElementById('taChartTitle').textContent=ma;
   document.getElementById('taSignals').innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:8px;text-align:center"><span class="spinner"></span> Đang tải dữ liệu...</div>';
-  document.getElementById('taSignals').innerHTML='';
   document.getElementById('taResult').style.display='block';
 
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Đang phân tích...';
@@ -2056,7 +2055,6 @@ async function fetchTA() {
     destroyCharts();
     // taResult đã visible từ đầu, chỉ cần update nội dung với error
     document.getElementById('taSignals').innerHTML=`<div style="color:var(--red);font-size:.85rem;padding:12px">⚠ ${e.message||'Lỗi không xác định'}</div>`;
-    document.getElementById('taSignals').innerHTML='';
   }
 }
 
@@ -2545,7 +2543,6 @@ function renderRadarTable(results, updatedAt, fromCache) {
       <th style="text-align:center;padding:6px 4px">Tín hiệu</th>
       <th style="text-align:right;padding:6px 4px">Cơ bản</th>
       <th style="text-align:right;padding:6px 4px">Kỹ thuật</th>
-      <th style="text-align:right;padding:6px 4px">Ichimoku</th>
       <th style="text-align:right;padding:6px 4px">Giá</th>
       <th style="text-align:center;padding:6px 4px">Hành động</th>
       <th style="text-align:center;padding:6px 4px">Phân tích</th>
@@ -2580,7 +2577,6 @@ function radarRow(r) {
     </td>
     <td style="text-align:right;padding:9px 4px;color:${scoreColor(r.buffett_score)}">${r.buffett_score}/14</td>
     <td style="text-align:right;padding:9px 4px">${sig.ta_score || 0}/100</td>
-    <td style="text-align:right;padding:9px 4px;font-size:.78rem;color:var(--muted)">${sig.ichi_label || '—'}</td>
     <td style="text-align:right;padding:9px 4px">${r.price ? fmt(r.price,1) : '—'}</td>
     <td style="text-align:center;padding:9px 6px">
       <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:700;
