@@ -884,7 +884,13 @@ async def index():
 
 @app.get("/api/health")
 def health():
-    return ok({"status": "ok", "version": "2.0.0", "time": datetime.datetime.now().isoformat()})
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return ok({
+        "status": "ok",
+        "version": "2.0.0",
+        "time": datetime.datetime.now().isoformat(),
+        "anthropic_key": f"set ({api_key[:8]}...)" if api_key else "NOT SET",
+    })
 
 
 def get_username(request: Request) -> str:
