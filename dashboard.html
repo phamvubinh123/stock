@@ -538,7 +538,6 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     <button class="nav-item active" data-group="khampha" onclick="showGroup('khampha')" style="position:relative">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       🏠 Trang Chủ
-      <span id="scanNavBadge" style="display:none;margin-left:auto;font-size:.65rem;background:var(--purple);color:#fff;padding:2px 7px;border-radius:10px;white-space:nowrap"><span class="spinner" style="width:8px;height:8px;border-width:1.5px"></span> Scanning</span>
     </button>
     <button class="nav-item" data-group="congthu" onclick="showGroup('congthu')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
@@ -1217,6 +1216,7 @@ function showSubPage(group, pageId, tabEl) {
   if (pageId === 'technical') {
     const ma = document.getElementById('taMA')?.value?.trim();
     if (ma) fetchTA();
+    else setTimeout(resizeCharts, 100); // resize nếu chart đã có
   }
   if (pageId === 'buffett') {
     const ma = document.getElementById('maCP')?.value?.trim();
@@ -1895,7 +1895,18 @@ function makeChart(containerId, opts={}) {
   return chart;
 }
 
-// autoSize:true tự handle resize qua ResizeObserver — không cần manual listener
+// Resize charts khi navigate về tab kỹ thuật
+function resizeCharts() {
+  [{ c:_chartCandle,id:'chartCandle' },{ c:_chartRsi,id:'chartRsi' },{ c:_chartMacd,id:'chartMacd' }]
+    .forEach(({c,id}) => {
+      if (!c) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      const w = el.offsetWidth || el.parentElement?.offsetWidth || 0;
+      const h = parseInt(el.style.height) || el.offsetHeight || 200;
+      if (w > 0) try { c.resize(w, h); c.timeScale().fitContent(); } catch(_) {}
+    });
+}
 
 const TA_MSGS = [
   'Đang tải dữ liệu giá lịch sử...',
@@ -2005,6 +2016,8 @@ async function fetchTA() {
     signalLineSeries.setData(signalData);
 
     [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c.timeScale().fitContent();}catch(_){}});
+    // Force resize sau khi DOM paint xong
+    setTimeout(resizeCharts, 150);
     [_chartCandle,_chartRsi,_chartMacd].forEach(src=>{
       src.timeScale().subscribeVisibleLogicalRangeChange(range=>{
         if(!range) return;
@@ -2533,7 +2546,8 @@ function radarRow(r) {
       </td>
       <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">Chưa scan — nhấn Scan để cập nhật</td>
       <td style="text-align:center;padding:9px 6px;white-space:nowrap">
-        <button class="btn-row" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
+        <button class="btn-row" onclick="openReport('${r.ticker}')" style="background:var(--purple-light);color:var(--purple);font-weight:600">📋 Report</button>
+        <button class="btn-row" style="margin-left:4px" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
         <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
       </td>
     </tr>`;
@@ -2558,7 +2572,8 @@ function radarRow(r) {
         background:${ac.bg};color:${ac.fg}">${sig.action}</span>
     </td>
     <td style="text-align:center;padding:9px 6px;white-space:nowrap">
-      <button class="btn-row" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
+      <button class="btn-row" onclick="openReport('${r.ticker}')" style="background:var(--purple-light);color:var(--purple);font-weight:600">📋 Report</button>
+      <button class="btn-row" style="margin-left:4px" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
       <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
     </td>
   </tr>`;
