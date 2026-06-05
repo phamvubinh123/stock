@@ -1874,8 +1874,8 @@ function destroyCharts() {
 function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
-  // Dùng explicit width/height thay vì autoSize để tránh bug 0x0 khi element mới visible
-  const w = el.getBoundingClientRect().width || el.parentElement?.getBoundingClientRect().width || 300;
+  const rect = el.getBoundingClientRect();
+  const w = rect.width || el.parentElement?.getBoundingClientRect().width || el.offsetWidth || 600;
   const h = el.clientHeight || parseInt(el.style.height) || 200;
   const chart = LightweightCharts.createChart(el, {
     width: w, height: h,
@@ -1972,6 +1972,9 @@ async function fetchTA() {
     });
 
     destroyCharts();
+
+    // Dùng rAF để đảm bảo DOM đã paint xong trước khi đọc kích thước chart
+    await new Promise(r => requestAnimationFrame(r));
 
     // ── Chart 1: Candlestick + Volume + MA20 + MA50
     _chartCandle = makeChart('chartCandle');
