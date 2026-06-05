@@ -1169,7 +1169,10 @@ function startClock() {
 
 // Check session khi load
 async function checkSession() {
-  if (!authToken) return;
+  if (!authToken) {
+    document.getElementById('loginScreen').style.display = 'flex';
+    return;
+  }
   try {
     const r = await fetch('/api/auth/me', {headers:{'X-Token': authToken}});
     const d = await r.json();
@@ -1177,8 +1180,12 @@ async function checkSession() {
       enterApp(d.username);
     } else {
       authToken = ''; localStorage.removeItem('sa_token');
+      document.getElementById('loginScreen').style.display = 'flex';
     }
-  } catch {}
+  } catch {
+    // Network error — vẫn thử vào app nếu có token
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
 }
 
 // ═══════════════════════════════════════════
