@@ -1880,11 +1880,9 @@ function destroyCharts() {
 function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
-  const rect = el.getBoundingClientRect();
-  const w = rect.width || el.parentElement?.getBoundingClientRect().width || el.offsetWidth || 600;
-  const h = el.clientHeight || parseInt(el.style.height) || 200;
+  // autoSize: true dùng ResizeObserver — không phụ thuộc vào thời điểm đọc width
   const chart = LightweightCharts.createChart(el, {
-    width: w, height: h,
+    autoSize: true,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
     grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
     crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
@@ -1896,15 +1894,7 @@ function makeChart(containerId, opts={}) {
   return chart;
 }
 
-// Resize charts khi window thay đổi kích thước
-window.addEventListener('resize', () => {
-  [{ c:_chartCandle, id:'chartCandle' }, { c:_chartRsi, id:'chartRsi' }, { c:_chartMacd, id:'chartMacd' }]
-    .forEach(({c, id}) => {
-      if (!c) return;
-      const el = document.getElementById(id);
-      if (el) c.applyOptions({ width: el.getBoundingClientRect().width || 300 });
-    });
-});
+// autoSize:true tự handle resize qua ResizeObserver — không cần manual listener
 
 const TA_MSGS = [
   'Đang tải dữ liệu giá lịch sử...',
@@ -1985,7 +1975,6 @@ async function fetchTA() {
   // ── Vẽ chart (try riêng, không ảnh hưởng signals nếu lỗi)
   try {
     destroyCharts();
-    await new Promise(res => setTimeout(res, 80));
 
     _chartCandle = makeChart('chartCandle');
     const candleSeries = _chartCandle.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});
