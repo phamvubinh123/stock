@@ -1863,8 +1863,11 @@ function destroyCharts() {
 function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
-  return LightweightCharts.createChart(el, {
-    autoSize: true,
+  // Dùng explicit width/height thay vì autoSize để tránh bug 0x0 khi element mới visible
+  const w = el.getBoundingClientRect().width || el.parentElement?.getBoundingClientRect().width || 300;
+  const h = el.clientHeight || parseInt(el.style.height) || 200;
+  const chart = LightweightCharts.createChart(el, {
+    width: w, height: h,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
     grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
     crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
@@ -1873,7 +1876,18 @@ function makeChart(containerId, opts={}) {
     handleScroll:true, handleScale:true,
     ...opts
   });
+  return chart;
 }
+
+// Resize charts khi window thay đổi kích thước
+window.addEventListener('resize', () => {
+  [{ c:_chartCandle, id:'chartCandle' }, { c:_chartRsi, id:'chartRsi' }, { c:_chartMacd, id:'chartMacd' }]
+    .forEach(({c, id}) => {
+      if (!c) return;
+      const el = document.getElementById(id);
+      if (el) c.applyOptions({ width: el.getBoundingClientRect().width || 300 });
+    });
+});
 
 const TA_MSGS = [
   'Đang tải dữ liệu giá lịch sử...',
@@ -2008,6 +2022,9 @@ async function fetchTA() {
     macdLineSeries.setData(macdData);
     const signalLineSeries = _chartMacd.addLineSeries({color:'#f97316',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
     signalLineSeries.setData(signalData);
+
+    // fitContent sau khi set data để đảm bảo charts hiện đủ dữ liệu
+    [_chartCandle, _chartRsi, _chartMacd].forEach(c => { try { c.timeScale().fitContent(); } catch(_){} });
 
     // Sync crosshair + timeScale
     const allCharts=[_chartCandle,_chartRsi,_chartMacd];
@@ -2644,11 +2661,16 @@ async function triggerRadar() {
         } catch(e) {
           if (attempt < 3) { await new Promise(res => setTimeout(res, 2000)); continue; }
           const row = document.querySelector(`#radarContainer tr[data-ticker="${t}"]`);
+          const errMsg = e.message === 'rate_limited' ? 'Rate limit — nhấn Thử lại sau 1 phút' : e.message;
           if (row) row.innerHTML = `<td style="padding:9px 8px"><b>${t}</b></td>
-            <td colspan="5" style="color:var(--red);font-size:.78rem;padding:9px 4px">⚠ ${e.message}</td>
+            <td colspan="5" style="color:var(--red);font-size:.78rem;padding:9px 4px">⚠ ${errMsg}</td>
             <td style="text-align:center;padding:9px 6px;white-space:nowrap">
               <button class="btn-row" onclick="retryScanRow('${t}')">↻ Thử lại</button>
-            </td><td></td>`;
+            </td>
+            <td style="text-align:center;padding:9px 6px;white-space:nowrap">
+              <button class="btn-row" disabled style="opacity:.35;cursor:not-allowed">📊 Cơ bản</button>
+              <button class="btn-row" disabled style="opacity:.35;cursor:not-allowed;margin-left:4px">📈 Kỹ thuật</button>
+            </td>`;
         }
       }
     };
@@ -3034,10 +3056,15 @@ async function addTicker(ticker) {
       if (live) live.outerHTML = radarRow(d.result);
     } catch(e) {
       const live = document.querySelector(`#radarContainer tr[data-ticker="${t}"]`);
+      const errMsg2 = e.message === 'rate_limited' ? 'Rate limit — nhấn Thử lại sau 1 phút' : e.message;
       if (live) live.innerHTML = `<td style="padding:9px 8px"><b>${t}</b></td>
-        <td colspan="6" style="padding:9px 4px;color:var(--red);font-size:.78rem">⚠ ${e.message}</td>
+        <td colspan="5" style="padding:9px 4px;color:var(--red);font-size:.78rem">⚠ ${errMsg2}</td>
         <td style="text-align:center;padding:9px 6px;white-space:nowrap">
           <button class="btn-row" onclick="retryScanRow('${t}')">↻ Thử lại</button>
+        </td>
+        <td style="text-align:center;padding:9px 6px;white-space:nowrap">
+          <button class="btn-row" disabled style="opacity:.35;cursor:not-allowed">📊 Cơ bản</button>
+          <button class="btn-row" disabled style="opacity:.35;cursor:not-allowed;margin-left:4px">📈 Kỹ thuật</button>
         </td>`;
     }
   }
