@@ -912,6 +912,8 @@ async def add_to_watchlist(request: Request, body: dict = Body(...)):
     u = get_username(request)
     wl = load_watchlist(u)
     if ticker not in wl:
+        if len(wl) >= 5:
+            raise HTTPException(400, "Vui lòng nhập tối đa 5 mã")
         wl.append(ticker)
         save_watchlist(wl, u)
     return ok({"watchlist": wl})

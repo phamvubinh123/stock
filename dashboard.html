@@ -3019,6 +3019,13 @@ async function addTicker(ticker) {
   }
   document.getElementById('autocompleteList').style.display = 'none';
 
+  // Kiểm tra giới hạn 5 mã
+  const currentWl = [...document.querySelectorAll('#wlTags .wl-tag')].map(el => el.textContent.replace('×','').trim());
+  if (!currentWl.includes(t) && currentWl.length >= 5) {
+    showToast('⚠ Vui lòng nhập tối đa 5 mã', 'error');
+    return;
+  }
+
   // Thêm vào watchlist server
   await addToWl(t);
 
