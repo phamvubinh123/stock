@@ -295,8 +295,23 @@ def get_trading():
 # CACHE — in-memory, TTL theo loại dữ liệu
 # ─────────────────────────────────────────────
 import time as _time
+import re as _re_rl
 _cache: dict = {}
 CACHE_TTL = {"bctc": 86400, "price": 300, "technical": 300, "scan": 300}
+
+def _rate_limit_response(err_str: str):
+    """Nếu err_str chứa thông báo rate limit từ vnstock, trả JSONResponse 429.
+    Trả về None nếu không phải rate limit."""
+    m = _re_rl.search(r"Chờ (\d+) giây|Wait (\d+) second", err_str)
+    if not m:
+        return None
+    wait = int(m.group(1) or m.group(2)) + 2
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "rate_limited", "retry_after": wait},
+        headers={"Retry-After": str(wait)},
+    )
 
 def cache_get(key: str):
     if key in _cache:
@@ -1296,15 +1311,21 @@ async def fetch_ticker(
             result["ok"] = False
             result["message"] = f"Không tìm thấy dữ liệu cho {ticker}"
 
-    except Exception as e:
+    except BaseException as e:
+        err_str = str(e)
+        rl = _rate_limit_response(err_str)
+        if rl:
+            log.warning(f"fetch {ticker}: rate limited")
+            return rl
         result["ok"] = False
-        result["message"] = str(e)
+        result["message"] = err_str
+        log.error(f"fetch {ticker}: {type(e).__name__}: {err_str[:100]}")
 
     try:
         if result.get("ok"):
             cache_set(cache_key, result)
         return ok(result)
-    except Exception as se:
+    except BaseException as se:
         log.error(f"Serialization error for {ticker}: {se}")
         raise HTTPException(500, f"Lỗi serialize dữ liệu: {se}")
 
@@ -1678,7 +1699,11 @@ def get_technical(ticker: str, period: int = Query(90)):
 
     except HTTPException:
         raise
-    except Exception as e:
+    except BaseException as e:
+        rl = _rate_limit_response(str(e))
+        if rl:
+            log.warning(f"technical {ticker}: rate limited")
+            return rl
         raise HTTPException(500, f"Lỗi: {e}")
 
 

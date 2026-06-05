@@ -1619,10 +1619,20 @@ async function fetchData() {
   if (btnA) { btnA.disabled = true; btnA.style.opacity = '.45'; btnA.style.cursor = 'not-allowed'; }
   log(`Kéo dữ liệu <strong>${ma}</strong>...`);
   try {
-    const res = await fetch(`/api/fetch/${ma}?yearly=${ky}&n=${n}`, {headers:{'X-Token':authToken}});
-    let d;
-    try { d = await res.json(); } catch(_) { throw new Error('Server lỗi khi kéo dữ liệu — vui lòng thử lại'); }
-    if (!d.ok && !d.income_ok && !d.balance_ok) throw new Error(d.message || 'Không tìm thấy dữ liệu');
+    // Retry khi bị rate limit (429)
+    let res, d;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch(`/api/fetch/${ma}?yearly=${ky}&n=${n}`, {headers:{'X-Token':authToken}});
+      try { d = await res.json(); } catch(_) { throw new Error('Server lỗi khi kéo dữ liệu — vui lòng thử lại'); }
+      if (res.status === 429) {
+        const waitSecs = d?.retry_after || 45;
+        log(`⏳ Rate limit vnstock — chờ ${waitSecs}s rồi thử lại...`);
+        await new Promise(r => setTimeout(r, waitSecs * 1000));
+        continue;
+      }
+      break;
+    }
+    if (!d.ok && !d.income_ok && !d.balance_ok) throw new Error(d.detail === 'rate_limited' ? 'Rate limit — thử lại sau ít phút' : (d.message || 'Không tìm thấy dữ liệu'));
     const allFields = ['dt','lng','lv','cpbh','cpql','lntt','thue','lnst','pe','gssk','tien','htk','tsnh','ts','nnh','ndh','phcp'];
     const rawYears = d.years || [];
     const seen = new Set();
