@@ -137,45 +137,70 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 
 ---
 
-## ✅ ĐÃ LÀM (cập nhật 2026-06-04)
+## ✅ ĐÃ LÀM (cập nhật 2026-06-05)
 
-### Scan & Radar
-- `triggerRadar()` **không dùng `/api/radar` batch nữa** — thay bằng scan từng mã riêng qua `/api/radar/scan-one`, 2 mã song song, tránh timeout Railway
-- `/api/radar/scan-one` có retry 3 lần với delay 2s/4s, thêm `time.sleep(0.3)` giữa scan_one_ticker và compute_technical
-- `_radar_sync`: fix `except: pass` → `results.append(_placeholder(futures[f]))` — không drop ticker bị lỗi
-- `_scan_one` retry tăng lên 3 lần, delay 2×attempt giây, `max_workers=2`, timeout=90s
-- Frontend `scanOne`: retry 2 lần tự động, row lỗi có nút **↻ Thử lại**
+### Rate Limit vnstock — xử lý đúng (quan trọng!)
+- **Root cause**: vnstock Guest = **20 requests/phút**. Mỗi scan 1 mã tốn 4 API calls → sau 5 mã bị chặn
+- vnstock throw `SystemExit` (BaseException) khi rate limit — KHÔNG phải `Exception`
+- **Server fix**: `except Exception` → `except BaseException` trong `fetch_ticker`, `get_technical`, `radar_scan_one`
+- **Server fix**: thêm `_rate_limit_response()` helper — parse "Chờ X giây" từ error → trả **HTTP 429** JSON thay vì crash
+- **Server fix**: `scan_one_ticker` thêm `sleep(1)` giữa income/balance/ratio calls
+- **Frontend fix**: scan tuần tự 1 mã tại một lúc (không song song)
+- **Frontend fix**: nhận 429 → đếm ngược "Đang chờ nguồn dữ liệu... (Xs)" → tự retry
+- **Frontend fix**: `fetchData` (tab Cơ bản) cũng retry khi nhận 429
+
+### Radar State Management — refactor dứt điểm
+- Thêm `_scanState = 'idle' | 'done'` làm source of truth duy nhất
+- `addTicker`: `idle` → chỉ lưu watchlist, không hiện bảng; `done` → scan ngay mã mới
+- `removeWl`: xóa hết → reset `_scanState='idle'`, clear bảng, hiện prompt
+- `loadRadarCache`: filter cache theo watchlist hiện tại, set `_scanState='done'`
+- `triggerRadar`: set `_scanState='done'` sau khi scan xong
+- Bỏ toàn bộ detect-state-từ-DOM (fragile)
+- `_showRadar(show)` / `_showEmptyPrompt(msg)` — helpers tập trung toggle UI
+
+### Watchlist Giới hạn
+- **Tối đa 5 mã** — server trả 400, frontend toast đỏ khi thêm mã thứ 6
+- Default watchlist: `["FPT","VCB","MWG","HPG","ACB"]` (giảm từ 10 xuống 5)
+
+### Lightweight-charts (tab Kỹ Thuật) — fix charts trống
+- `makeChart()`: đổi `autoSize:true` → explicit `width/height` từ `getBoundingClientRect()`
+- Gọi `fitContent()` sau khi `setData()` để force render đúng data range
+- Thêm `window.resize` listener để resize chart khi thay đổi màn hình
+- **Root cause**: `autoSize:true` đọc size khi element mới `display:block` → 0×0 → không render
+
+### Deep Dive (tab Cơ bản) — fix TradingView chart lẫn vào
+- `#tv-chart-container` trong deepDiveCard đổi thành `display:none`
+- Chart kỹ thuật (TradingView widget) không còn hiện trong tab Cơ bản
+
+### Scan Row Error UX
+- Mã bị lỗi scan: 2 nút Cơ bản/Kỹ thuật → disabled + opacity 0.35
+- Message "rate_limited" → "Nguồn dữ liệu tạm giới hạn — nhấn Thử lại"
+- Countdown "Rate limit — chờ Xs" → "Đang chờ nguồn dữ liệu... (Xs)"
+
+### Login Autofill
+- Username `binhpv` và PIN `1234` tự điền sẵn vào form login
+- Account `binhpv/1234` đã được tạo
+
+### Scan & Radar (session cũ)
+- `triggerRadar()` scan từng mã riêng qua `/api/radar/scan-one`, tuần tự, tránh rate limit
+- `/api/radar/scan-one` retry + trả 429 khi rate limit
+- Frontend `scanOne`: retry tự động với countdown
 - Server trả **no-cache headers** cho `/` → browser luôn load file mới
 
 ### Multi-ticker Input
 - `addTickerFromInput()`: split input theo `,` hoặc khoảng trắng → validate từng mã (`/^[A-Z]{2,7}$/`) → add từng cái
 - Mã không hợp lệ báo toast đỏ ngay khi Enter
-- Click autocomplete vẫn dùng `addTicker(sym)` trực tiếp
 
 ### Deep Dive Card (Phân tích cơ bản)
-- **Xóa layout 2 cột `deep-grid`** cho stats, thay bằng **`#ddAllStats`** — 1 grid thống nhất
-- CSS: `display:grid !important`, 5 cột (>900px) / 3 cột (≤900px) / 2 cột (≤520px)
-- Stats hiển thị: Buffett Score, P/E, ROE, Biên gộp, DCF, MOS, Giá, RSI, Ichimoku, Volume
-- `loadDeepDive`: retry 2 lần khi fetch technical fail, hiện lỗi rõ ràng thay vì "—"
-
-### TradingView Chart trong Deep Dive
-- Thêm `<div id="tv-chart-container">` vào `deepDiveCard` HTML (trước đây thiếu → chart không render)
-- `loadTVChart` giờ hoạt động đúng khi click từ radar
-
-### Lightweight-charts (tab Kỹ Thuật)
-- `makeChart()` dùng `autoSize: true` thay vì đo `getBoundingClientRect()` → ổn định hơn
+- **`#ddAllStats`** — 1 grid thống nhất, 5 cột (>900px) / 3 cột (≤900px) / 2 cột (≤520px)
+- Stats: Buffett Score, P/E, ROE, Biên gộp, DCF, MOS, Giá, RSI, Ichimoku, Volume
 
 ### Navigation
-- **Xóa hoàn toàn Danh mục** khỏi sidebar, mobile nav, `GROUP_PAGES`, `GROUP_SUBNAV`, `GROUP_DEFAULT`, `MOB_GROUP`, `subNavDanhMuc`
 - Chỉ còn 2 group: `khampha` (Trang Chủ) và `congthu` (Công Cụ)
-- Mobile bottom nav: chỉ còn 2 nút (Trang Chủ + Công Cụ)
+- Mobile bottom nav: 2 nút
 
-### Header Redesign (giống SSI)
-- Nền tối `#0D1B2A`, height 44px
-- Trái: **đồng hồ real-time** `HH:MM:SS` (update mỗi giây, dùng `startClock()`)
-- Giữa: icons — Hỗ trợ (? + label), Key, Bell (badge đỏ số alert)
-- Phải: separator `|` + icon người + tên tài khoản (set trong `enterApp`)
-- Mobile: icons không hiện label, font nhỏ hơn
+### Header
+- Nền tối `#0D1B2A`, đồng hồ real-time, icons giữa, tên user phải
 
 ### Validator mã CP
 - Regex `/^[A-Z]{2,7}$/` — chỉ chữ cái, 2-7 ký tự
