@@ -2491,7 +2491,8 @@ const ACTION_CONFIG = {
 };
 
 // Trạng thái scan: 'idle' = chưa scan lần nào; 'done' = đã scan xong ít nhất 1 lần
-let _scanState = 'idle';
+let _scanState = 'idle'; // 'idle' | 'scanning' | 'done'
+let _scanQueue = [];     // tickers thêm trong lúc đang scan
 
 // Hiện/ẩn radarContainer, ẩn/hiện picks placeholder
 function _showRadar(show) {
@@ -2595,6 +2596,8 @@ async function triggerRadar() {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang quét...';
   prog.classList.add('show'); pmsg.style.display = 'block';
 
+  _scanQueue = [];
+  _scanState = 'scanning';
   try {
     // 1. Lấy watchlist từ server
     const wlR = await fetch('/api/watchlist', { headers: {'X-Token': authToken} });
@@ -2675,6 +2678,11 @@ async function triggerRadar() {
     // Scan tuần tự từng mã để tránh rate limit vnstock (20 req/phút Guest)
     for (let i = 0; i < tickers.length; i++) {
       await scanOne(tickers[i]);
+      // Nếu user thêm mã mới trong lúc scan → append vào cuối
+      while (_scanQueue.length > 0) {
+        const next = _scanQueue.shift();
+        tickers.push(next);
+      }
     }
     _scanState = 'done';  // đánh dấu đã scan xong
 
@@ -3021,7 +3029,24 @@ async function addTicker(ticker) {
     return;
   }
 
-  // Đã scan trước đó → thêm vào bảng và scan ngay
+  if (_scanState === 'scanning') {
+    // Đang scan bảng → thêm placeholder và queue để scan sau mã hiện tại
+    let tbody = document.querySelector('#radarContainer tbody');
+    if (tbody && !tbody.querySelector(`tr[data-ticker="${t}"]`)) {
+      const pl = document.createElement('tr');
+      pl.dataset.ticker = t;
+      pl.style.borderBottom = '1px solid var(--border)';
+      pl.innerHTML = `<td style="padding:9px 8px"><b>${t}</b></td>
+        <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">
+          <span class="spinner"></span> Đang chờ scan...
+        </td><td></td>`;
+      tbody.appendChild(pl);
+      _scanQueue.push(t);
+    }
+    return;
+  }
+
+  // _scanState === 'done' → thêm vào bảng và scan ngay
   let tbody = document.querySelector('#radarContainer tbody');
   if (!tbody) {
     renderRadarTable([], null, false);
