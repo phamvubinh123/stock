@@ -1355,6 +1355,156 @@ async def buffett_score(ticker: str, n: int = Query(5)):
 
 
 # ─────────────────────────────────────────────
+# ROUTES — REPORT TỔNG HỢP (Cơ bản + Kỹ thuật + Tin tức + AI)
+# ─────────────────────────────────────────────
+
+async def fetch_news(ticker: str) -> str:
+    """Tìm tin tức mới nhất về mã CP dùng DuckDuckGo (free, no API key)."""
+    try:
+        import httpx
+        from bs4 import BeautifulSoup
+        query = f"{ticker} cổ phiếu tin tức 2025 2026"
+        url   = f"https://html.duckduckgo.com/html/?q={query}"
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible)"})
+        soup     = BeautifulSoup(r.text, "html.parser")
+        snippets = [el.get_text(strip=True) for el in soup.select(".result__snippet")][:5]
+        titles   = [el.get_text(strip=True) for el in soup.select(".result__title")][:5]
+        lines = []
+        for i, s in enumerate(snippets):
+            t = titles[i] if i < len(titles) else ""
+            lines.append(f"• {t}: {s}" if t else f"• {s}")
+        return "\n".join(lines) if lines else "Không tìm thấy tin tức gần đây."
+    except Exception as e:
+        return f"Không thể tải tin tức: {e}"
+
+
+def build_report_prompt(ticker: str, fundamental: dict, technical: dict, news: str) -> str:
+    f  = fundamental
+    t  = technical
+    ichi  = (t.get("ichimoku") or {})
+    vol   = (t.get("volume_signal") or {})
+    lat   = (t.get("latest") or {})
+    rsi   = lat.get("rsi", "N/A")
+    price = lat.get("close", 0) or 0
+    km    = (f.get("key_metrics") or {})
+    return f"""Bạn là chuyên gia phân tích chứng khoán Việt Nam.
+Phân tích cổ phiếu {ticker} và đưa ra khuyến nghị đầu tư.
+
+=== DỮ LIỆU ===
+
+CƠ BẢN:
+- Điểm Buffett: {f.get("score", 0)}/14
+- ROE: {km.get("roe", "N/A")}%
+- Biên gộp: {km.get("gross_margin", "N/A")}%
+- P/E: {km.get("pe", "N/A")}
+- DCF/giá trị thực: {km.get("dcf", "N/A")}k
+
+KỸ THUẬT:
+- Giá hiện tại: {price:,.1f}k
+- Ichimoku: {ichi.get("position", "N/A")} ({ichi.get("tk_cross") or "không có cross"})
+- RSI: {rsi}
+- Volume: {vol.get("warning") or "bình thường"}
+
+TIN TỨC GẦN ĐÂY:
+{news}
+
+=== KINH NGHIỆM THỰC CHIẾN ===
+{STREET_SMART_RULES}
+
+=== YÊU CẦU ===
+Trả lời theo đúng format sau, tiếng Việt, súc tích:
+
+VERDICT: [MUA / CHỜ / TRÁNH]
+
+LÝ DO:
+- [lý do 1 — cơ bản]
+- [lý do 2 — kỹ thuật]
+- [lý do 3 — tin tức/ngữ cảnh]
+
+VÙNG MUA: [giá từ - đến, đơn vị nghìn đồng]
+MỤC TIÊU: [TP, nghìn đồng] (+x%)
+CẮT LỖ: [SL, nghìn đồng] (-x%)
+RISK/REWARD: [1:x]
+
+RỦI RO: [1 rủi ro quan trọng nhất cần theo dõi]
+"""
+
+
+@app.post("/api/report/{ticker}")
+async def get_report(ticker: str, request: Request):
+    """Report tổng hợp: Cơ bản + Kỹ thuật + Tin tức + AI verdict."""
+    get_current_user(request)
+    ticker = ticker.upper()
+
+    # 1. Cơ bản
+    fundamental = {}
+    try:
+        raw   = await fetch_ticker(ticker, yearly="1", n=5)
+        body  = json.loads(raw.body)
+        score = compute_buffett_score(body["data"], 5)
+        km    = score.get("key_metrics", {})
+        fundamental = {
+            "score":       score.get("score", 0),
+            "key_metrics": {
+                "roe":          round(km.get("roe", 0) * 100, 1) if isinstance(km.get("roe"), float) else km.get("roe", "N/A"),
+                "gross_margin": round(km.get("gross_margin", 0) * 100, 1) if isinstance(km.get("gross_margin"), float) else km.get("gross_margin", "N/A"),
+                "pe":           round(km.get("pe", 0), 1) if isinstance(km.get("pe"), (int, float)) else km.get("pe", "N/A"),
+                "dcf":          round(km.get("dcf", 0) / 1000, 1) if isinstance(km.get("dcf"), (int, float)) and km.get("dcf") else "N/A",
+            },
+        }
+    except Exception as e:
+        fundamental = {"score": 0, "error": str(e)}
+
+    # 2. Kỹ thuật
+    technical = {}
+    try:
+        technical = compute_technical_sync(ticker, period=90)
+    except Exception as e:
+        technical = {"error": str(e)}
+
+    # 3. Tin tức
+    news_summary = await fetch_news(ticker)
+
+    # 4. Claude API
+    report_text = ""
+    try:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            report_text = "(Cần ANTHROPIC_API_KEY để tạo report AI)"
+        else:
+            prompt = build_report_prompt(ticker, fundamental, technical, news_summary)
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"Content-Type": "application/json",
+                             "x-api-key": api_key,
+                             "anthropic-version": "2023-06-01"},
+                    json={"model": "claude-haiku-4-5",
+                          "max_tokens": 800,
+                          "messages": [{"role": "user", "content": prompt}]},
+                )
+            report_text = resp.json()["content"][0]["text"]
+    except Exception as e:
+        report_text = f"Lỗi AI: {e}"
+
+    signal = calc_combined_signal(fundamental.get("score", 0), technical)
+
+    return ok({
+        "ticker":      ticker,
+        "fundamental": {"score": fundamental.get("score", 0), "total": 14,
+                        "key_metrics": fundamental.get("key_metrics", {})},
+        "technical":   {"ta_score":      signal.get("ta_score", 0),
+                        "ichimoku":      technical.get("ichimoku", {}),
+                        "rsi":           (technical.get("latest") or {}).get("rsi"),
+                        "volume_signal": technical.get("volume_signal", {})},
+        "news":        news_summary,
+        "report":      report_text,
+        "signal":      signal,
+    })
+
+
+# ─────────────────────────────────────────────
 # ROUTES — MARKET DATA (từ main.py)
 # ─────────────────────────────────────────────
 

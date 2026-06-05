@@ -2527,7 +2527,10 @@ function renderRadarTable(results, updatedAt, fromCache) {
 function radarRow(r) {
   if (r.not_scanned) {
     return `<tr data-ticker="${r.ticker}" style="border-bottom:1px solid var(--border)">
-      <td style="padding:9px 8px"><b>${r.ticker}</b></td>
+      <td style="padding:9px 8px">
+        <b style="cursor:pointer;color:var(--purple);text-decoration:underline dotted"
+          onclick="openReport('${r.ticker}')" title="Xem report tổng hợp">${r.ticker}</b>
+      </td>
       <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">Chưa scan — nhấn Scan để cập nhật</td>
       <td style="text-align:center;padding:9px 6px;white-space:nowrap">
         <button class="btn-row" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
@@ -2539,7 +2542,8 @@ function radarRow(r) {
   const ac  = ACTION_CONFIG[sig.action] || ACTION_CONFIG['TRÁNH'];
   return `<tr data-ticker="${r.ticker}" style="border-bottom:1px solid var(--border)">
     <td style="padding:9px 8px">
-      <b>${r.ticker}</b>
+      <b style="cursor:pointer;color:var(--purple);text-decoration:underline dotted"
+        onclick="openReport('${r.ticker}')" title="Xem report tổng hợp">${r.ticker}</b>
       ${r.volume_warning ? `<div style="font-size:.68rem;color:var(--red);margin-top:2px">${r.volume_warning}</div>` : ''}
     </td>
     <td style="text-align:center;padding:9px 4px">
@@ -3103,5 +3107,136 @@ dcaLoad();
     Công Cụ
   </button>
 </nav>
+<!-- ══════════ MODAL: REPORT TỔNG HỢP ══════════ -->
+<div id="reportModal" onclick="if(event.target===this)closeReport()"
+  style="display:none;position:fixed;inset:0;z-index:600;
+  background:rgba(0,0,0,.45);backdrop-filter:blur(2px);
+  align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:560px;
+    max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.22)">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:16px 20px;border-bottom:1px solid var(--border);
+      position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0">
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--purple)" id="reportTicker">—</div>
+        <div style="font-size:.73rem;color:var(--text3);margin-top:2px">Report tổng hợp · Cơ bản + Kỹ thuật + Tin tức</div>
+      </div>
+      <button onclick="closeReport()" style="border:none;background:transparent;
+        font-size:1.5rem;cursor:pointer;color:var(--text3);line-height:1;padding:4px 8px">×</button>
+    </div>
+
+    <!-- Loading -->
+    <div id="reportLoading" style="padding:48px 24px;text-align:center;color:var(--text3)">
+      <div class="spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 14px"></div>
+      <div style="font-size:.88rem;font-weight:500">Đang phân tích 3 nguồn dữ liệu...</div>
+      <div style="font-size:.75rem;margin-top:6px">Cơ bản · Kỹ thuật · Tin tức mới nhất</div>
+    </div>
+
+    <!-- Content -->
+    <div id="reportContent" style="display:none;padding:20px">
+
+      <!-- Verdict -->
+      <div id="reportVerdict" style="text-align:center;margin-bottom:18px"></div>
+
+      <!-- 3 nguồn -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px">
+        <div class="stat">
+          <div class="stat-lbl">Cơ bản</div>
+          <div class="stat-val" id="rFundamental">—</div>
+          <div style="font-size:.65rem;color:var(--text3)">Buffett score</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">Kỹ thuật</div>
+          <div class="stat-val" id="rTechnical">—</div>
+          <div style="font-size:.65rem;color:var(--text3)" id="rIchimoku">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">Tin tức</div>
+          <div class="stat-val" id="rNewsIcon">—</div>
+          <div style="font-size:.65rem;color:var(--text3)">Ngữ cảnh</div>
+        </div>
+      </div>
+
+      <!-- AI Report -->
+      <div class="ai-box" id="reportText"
+        style="white-space:pre-line;font-size:.84rem;line-height:1.65"></div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn" style="flex:1;font-size:.78rem"
+          onclick="closeReport();openInBuffett(currentReportTicker)">📊 Chi tiết cơ bản</button>
+        <button class="btn" style="flex:1;font-size:.78rem"
+          onclick="closeReport();openInTechnical(currentReportTicker)">📈 Xem kỹ thuật</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════ REPORT MODAL ══════════
+let currentReportTicker = '';
+
+async function openReport(ticker) {
+  currentReportTicker = ticker;
+  const modal = document.getElementById('reportModal');
+  modal.style.display = 'flex';
+  document.getElementById('reportTicker').textContent = ticker;
+  document.getElementById('reportLoading').style.display = 'block';
+  document.getElementById('reportContent').style.display = 'none';
+
+  try {
+    const r = await fetch(`/api/report/${ticker}`, {
+      method: 'POST', headers: {'X-Token': authToken}
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Lỗi server');
+    renderReport(d);
+  } catch(e) {
+    document.getElementById('reportLoading').innerHTML =
+      `<div style="color:var(--red);padding:24px;text-align:center">⚠ ${e.message}</div>`;
+  }
+}
+
+function renderReport(d) {
+  document.getElementById('reportLoading').style.display = 'none';
+  document.getElementById('reportContent').style.display = 'block';
+
+  const sig = d.signal || {};
+  const vColor = sig.color === 'green' ? 'var(--green)'
+               : sig.color === 'red'   ? 'var(--red)'
+               : 'var(--yellow)';
+  const vIcon  = sig.action === 'XEM'   ? '📈'
+               : sig.action === 'TRÁNH' ? '📉' : '⚖️';
+  document.getElementById('reportVerdict').innerHTML =
+    `<div style="display:inline-flex;align-items:center;gap:10px;
+      padding:10px 28px;border-radius:24px;
+      background:${vColor}20;border:1.5px solid ${vColor};
+      font-weight:700;font-size:1.1rem;color:${vColor}">
+      ${vIcon} ${sig.action || '—'} · ${sig.combined || 0}/100
+    </div>`;
+
+  const f = d.fundamental || {}, t = d.technical || {};
+  const fScore = f.score || 0, tScore = t.ta_score || 0;
+  const fColor = fScore >= 10 ? 'var(--green)' : fScore >= 7 ? 'var(--yellow)' : 'var(--red)';
+  const tColor = tScore >= 70 ? 'var(--green)' : tScore >= 50 ? 'var(--yellow)' : 'var(--red)';
+  document.getElementById('rFundamental').innerHTML = `<span style="color:${fColor}">${fScore}/14</span>`;
+  document.getElementById('rTechnical').innerHTML   = `<span style="color:${tColor}">${tScore}/100</span>`;
+  document.getElementById('rIchimoku').textContent  = (t.ichimoku || {}).position || '—';
+
+  const volWarn = (t.volume_signal || {}).warning;
+  document.getElementById('rNewsIcon').innerHTML = volWarn
+    ? `<span style="color:var(--yellow);font-size:1rem">⚠️</span>`
+    : `<span style="color:var(--green);font-size:1rem">✓</span>`;
+
+  document.getElementById('reportText').textContent = d.report || '—';
+}
+
+function closeReport() {
+  document.getElementById('reportModal').style.display = 'none';
+}
+</script>
 </body>
 </html>

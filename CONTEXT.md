@@ -1892,3 +1892,39 @@ async def get_radar(request: Request):
 - [ ] Pre-computed cache scan VN30 lúc 8:00 sáng
 - [ ] Scheduler chạy khi server start
 - [ ] Test autocomplete gõ tên tiếng Việt + mã
+
+---
+
+## 📊 REPORT TỔNG HỢP — Click vào tên mã
+
+### Mục tiêu
+Khi user click vào tên mã trong bảng Radar/Watchlist
+→ hiện modal Report Tổng Hợp từ 3 nguồn: Cơ bản + Kỹ thuật + Tin tức
+→ AI ra verdict cuối cùng: MUA/CHỜ/TRÁNH + vùng mua + TP + SL
+
+Các nút [Cơ bản] và [Kỹ thuật] giữ nguyên như hiện tại.
+Chỉ thêm: click vào TÊN MÃ → mở modal report tổng hợp.
+
+### Đã hoàn thành (2026-06-05)
+- POST /api/report/{ticker} — gộp cơ bản + kỹ thuật + tin tức + Claude AI
+- fetch_news() — DuckDuckGo HTML scraping, beautifulsoup4
+- build_report_prompt() — nhúng STREET_SMART_RULES
+- Modal HTML + JS: openReport(), renderReport(), closeReport()
+- Tên mã trong bảng Radar có underline + cursor pointer → click mở modal
+- requirements.txt: thêm beautifulsoup4
+
+### Backend — POST /api/report/{ticker}
+- Fetch fundamental qua fetch_ticker() + compute_buffett_score()
+- Fetch technical qua compute_technical_sync()
+- Fetch news qua DuckDuckGo HTML (free, no API key)
+- Claude Haiku tổng hợp → verdict MUA/CHỜ/TRÁNH + vùng mua + TP + SL + R/R
+- Dùng calc_combined_signal() cho điểm tổng
+
+### Frontend — Modal
+- Sticky header với tên mã + nút đóng
+- Loading spinner "Đang phân tích 3 nguồn dữ liệu..."
+- Verdict badge (màu green/yellow/red)
+- 3 stat boxes: Buffett score / TA score + Ichimoku / Tin tức icon
+- AI report text (white-space: pre-line)
+- 2 nút action: Chi tiết cơ bản / Xem kỹ thuật
+- Click backdrop → đóng modal
