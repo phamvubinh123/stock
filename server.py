@@ -146,7 +146,7 @@ USE_DB = bool(DATABASE_URL) and HAS_PSYCOPG2
 # WATCHLIST CONFIG — sửa thoải mái
 # ─────────────────────────────────────────────
 DEFAULT_WATCHLIST = ["FPT", "VCB"]
-VN30_TOP10 = ["VCB","BID","CTG","FPT","MWG","HPG","GAS","VIC","VHM","MSN"]
+VN30_TOP10 = ["FPT","VCB","MWG","HPG","ACB"]
 VN30_RADAR_CACHE = "vn30_radar_cache.json"
 
 # File lưu watchlist & daily results (fallback khi không có DB)
