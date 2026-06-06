@@ -1878,12 +1878,21 @@ function destroyCharts() {
   _chartCandle=_chartRsi=_chartMacd=null;
 }
 
+function _getChartWidth() {
+  // Đọc width thực từ app-right (luôn visible, không bị ảnh hưởng page show/hide)
+  const appRight = document.querySelector('.app-right');
+  const sidebar  = document.querySelector('.bottom-nav');
+  const sidebarW = sidebar ? sidebar.offsetWidth : 220;
+  return (appRight ? appRight.offsetWidth : window.innerWidth) - sidebarW - 32;
+}
+
 function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
-  // autoSize: true dùng ResizeObserver — không phụ thuộc vào thời điểm đọc width
+  const w = Math.max(_getChartWidth(), 300);
+  const h = parseInt(el.style.height) || 200;
   const chart = LightweightCharts.createChart(el, {
-    autoSize: true,
+    width: w, height: h,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
     grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
     crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
@@ -1895,18 +1904,20 @@ function makeChart(containerId, opts={}) {
   return chart;
 }
 
-// Resize charts khi navigate về tab kỹ thuật
+// Resize charts — dùng cùng cách tính width
 function resizeCharts() {
+  const w = Math.max(_getChartWidth(), 300);
   [{ c:_chartCandle,id:'chartCandle' },{ c:_chartRsi,id:'chartRsi' },{ c:_chartMacd,id:'chartMacd' }]
     .forEach(({c,id}) => {
       if (!c) return;
       const el = document.getElementById(id);
       if (!el) return;
-      const w = el.offsetWidth || el.parentElement?.offsetWidth || 0;
-      const h = parseInt(el.style.height) || el.offsetHeight || 200;
-      if (w > 0) try { c.resize(w, h); c.timeScale().fitContent(); } catch(_) {}
+      const h = parseInt(el.style.height) || 200;
+      try { c.resize(w, h); } catch(_) {}
     });
 }
+
+window.addEventListener('resize', () => resizeCharts());
 
 const TA_MSGS = [
   'Đang tải dữ liệu giá lịch sử...',
