@@ -192,6 +192,7 @@ def ok(data, status=200):
         content=json.dumps(data, cls=SafeEncoder, ensure_ascii=False),
         media_type="application/json",
         status_code=status,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
 
@@ -1691,11 +1692,10 @@ def get_technical(ticker: str, period: int = Query(90)):
 
         ticker = ticker.upper()
         cache_key = f"technical:{ticker}:{period}"
-        # Tạm bỏ cache để debug
-        # cached = cache_get(cache_key)
-        # if cached:
-        #     log.info(f"[CACHE HIT] {cache_key}")
-        #     return ok(cached)
+        cached = cache_get(cache_key)
+        if cached:
+            log.info(f"[CACHE HIT] {cache_key}")
+            return ok(cached)
         end_date = str(datetime.date.today())
         start_date = str(datetime.date.today() - datetime.timedelta(days=period * 2))
 
