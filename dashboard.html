@@ -506,10 +506,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   .wl-tags { gap: 5px; }
   .wl-tag { font-size: .78rem; padding: 5px 10px; }
 
-  /* Charts trong tab kỹ thuật */
-  #chartCandle { height: 260px !important; }
-  #chartRsi { height: 90px !important; }
-  #chartMacd { height: 90px !important; }
+  /* Charts trong tab kỹ thuật — dùng max-height để không bị overflow */
+  #chartCandle { height: 260px; }
+  #chartRsi    { height: 90px; }
+  #chartMacd   { height: 90px; }
 
   /* Technical form: wrap đúng */
   #page-technical .fetch-row { gap: 8px; }
@@ -1981,7 +1981,8 @@ function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
   const w = Math.max(_getChartWidth(), 300);
-  const h = parseInt(el.style.height) || 200;
+  // Dùng getComputedStyle để đọc height thật (kể cả khi bị override bởi CSS mobile)
+  const h = parseInt(getComputedStyle(el).height) || parseInt(el.style.height) || 200;
   const chart = LightweightCharts.createChart(el, {
     width: w, height: h,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
@@ -2003,7 +2004,7 @@ function resizeCharts() {
       if (!c) return;
       const el = document.getElementById(id);
       if (!el) return;
-      const h = parseInt(el.style.height) || 200;
+      const h = parseInt(getComputedStyle(el).height) || parseInt(el.style.height) || 200;
       try { c.resize(w, h); } catch(_) {}
     });
 }
