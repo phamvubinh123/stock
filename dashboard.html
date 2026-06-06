@@ -1971,9 +1971,10 @@ function _getChartWidth() {
   // Ưu tiên đọc từ container thật nếu visible
   const el = document.getElementById('chartCandle');
   if (el && el.offsetWidth > 50) return el.offsetWidth;
-  // Fallback: app-right đã là right panel (không bao gồm sidebar)
+  // Trên mobile, dùng window.innerWidth là reliable nhất
+  if (window.innerWidth <= 768) return Math.max(window.innerWidth - 40, 280);
   const appRight = document.querySelector('.app-right');
-  const w = appRight ? appRight.offsetWidth : window.innerWidth;
+  const w = (appRight && appRight.offsetWidth > 50) ? appRight.offsetWidth : window.innerWidth;
   return Math.max(w - 32, 300);
 }
 
@@ -2090,6 +2091,8 @@ async function fetchTA() {
     });
 
   // ── Vẽ chart (try riêng, không ảnh hưởng signals nếu lỗi)
+  // Đợi 1 frame để browser tính layout trước khi đọc dimensions
+  await new Promise(r => requestAnimationFrame(r));
   try {
     if (typeof LightweightCharts === 'undefined') throw new Error('Thư viện LightweightCharts chưa tải (CDN lỗi)');
     const _dbgW = _getChartWidth();
@@ -2126,8 +2129,9 @@ async function fetchTA() {
     signalLineSeries.setData(signalData);
 
     [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c.timeScale().fitContent();}catch(_){}});
-    // Force resize sau khi DOM paint xong
+    // Force resize sau khi DOM paint xong — mobile cần thêm 1 lần nữa sau 500ms
     setTimeout(resizeCharts, 150);
+    setTimeout(resizeCharts, 500);
     [_chartCandle,_chartRsi,_chartMacd].forEach(src=>{
       src.timeScale().subscribeVisibleLogicalRangeChange(range=>{
         if(!range) return;
