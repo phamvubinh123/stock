@@ -462,7 +462,10 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     border: 1px solid var(--border);
   }
   .fetch-row { flex-direction: column; gap: 6px !important; }
-  .fetch-row .fg, .fetch-row > div, .fetch-row > button { flex: unset !important; width: 100% !important; }
+  .fetch-row .fg { flex: unset !important; width: 100% !important; }
+  .fetch-row > button { flex: unset !important; width: 100% !important; }
+  #page-technical .fetch-row > div { flex: unset !important; width: 100% !important; }
+  #page-buffett .fetch-row > div.fg { flex: unset !important; width: 100% !important; }
   input, select { font-size: 16px !important; width: 100%; }
   .calc-grid { grid-template-columns: 1fr !important; }
   .calc-input-group { grid-template-columns: 1fr !important; }
