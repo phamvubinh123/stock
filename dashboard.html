@@ -1989,8 +1989,7 @@ function makeChart(containerId, opts={}) {
   const w = Math.max(el.clientWidth || _getChartWidth(), 300);
   const computedH = parseInt(getComputedStyle(el).height);
   const h = (computedH > 0 ? computedH : null) || parseInt(el.style.height) || 200;
-  console.log(`[chart] ${containerId}: w=${w} h=${h} clientW=${el.clientWidth} offsetW=${el.offsetWidth}`);
-  document.getElementById('taChartTitle').title = `w=${w} h=${h} clientW=${el.clientWidth}`;
+  document.getElementById('taChartTitle').title = `w=${w} h=${h}`;
   const chart = LightweightCharts.createChart(el, {
     width: w, height: h,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
