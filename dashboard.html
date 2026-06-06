@@ -478,6 +478,82 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   .hist-item { flex-wrap: wrap; gap: 8px; }
   .login-card { margin: 16px; padding: 28px 20px; }
   .app-body { padding-bottom: 64px; }
+
+  /* Sub-nav tabs: scroll ngang */
+  .page-sub-nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 10px 0;
+    gap: 2px;
+    scrollbar-width: none;
+  }
+  .page-sub-nav::-webkit-scrollbar { display: none; }
+  .page-sub-tab { padding: 8px 12px; font-size: .78rem; white-space: nowrap; }
+
+  /* Radar table: thêm overflow scroll */
+  #radarContainer .card { padding: 10px 8px; }
+
+  /* Report modal: gần full-screen trên mobile */
+  #reportModal { padding: 0 !important; align-items: flex-end !important; }
+  #reportModal > div {
+    border-radius: 16px 16px 0 0 !important;
+    max-height: 92vh !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Watchlist tags: đảm bảo wrap đúng, không bị cắt */
+  .wl-tags { gap: 5px; }
+  .wl-tag { font-size: .78rem; padding: 5px 10px; }
+
+  /* Charts trong tab kỹ thuật */
+  #chartCandle { height: 260px !important; }
+  #chartRsi { height: 90px !important; }
+  #chartMacd { height: 90px !important; }
+
+  /* Technical form: wrap đúng */
+  #page-technical .fetch-row { gap: 8px; }
+  #tfBtns { flex-wrap: wrap; gap: 4px; }
+
+  /* Card margin giảm */
+  .ai-box { margin: 6px 8px; }
+}
+
+@media (max-width: 480px) {
+  /* Header: ẩn đồng hồ, bớt icon */
+  .hdr-clock { display: none; }
+  /* Ẩn nút Hỗ trợ và Đổi mật khẩu, chỉ giữ chuông thông báo */
+  .hdr-icons .hdr-btn:nth-child(1),
+  .hdr-icons .hdr-btn:nth-child(2) { display: none; }
+  .hdr-sep { margin: 0 4px; }
+  .hdr-account { padding: 4px 4px; gap: 4px; }
+  .hdr-account-name { font-size: .7rem; }
+
+  /* Sub-nav tabs: rút ngắn text hơn */
+  .page-sub-tab { padding: 7px 10px; font-size: .74rem; }
+
+  /* Radar table: ẩn cột Kỹ thuật (index 4) và Giá (index 5) */
+  #radarContainer table thead tr th:nth-child(4),
+  #radarContainer table thead tr th:nth-child(5),
+  #radarContainer table tbody tr td:nth-child(4),
+  #radarContainer table tbody tr td:nth-child(5) { display: none; }
+
+  /* Nút hành động trong radar: xếp dọc, cách nhau */
+  #radarContainer td:last-child { white-space: normal !important; }
+  #radarContainer td:last-child .btn-row { display: inline-block; margin: 2px 2px !important; }
+
+  /* Card padding nhỏ hơn */
+  .card { margin: 6px; padding: 10px; }
+  .summary-card { margin: 6px; padding: 10px; }
+
+  /* Summary grid: 2 cột vẫn giữ */
+  .summary-grid { gap: 6px; }
+  .summary-item { padding: 8px 10px; }
+
+  /* Stat grid */
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat { padding: 8px; }
+  .stat-val { font-size: .95rem; }
 }
 </style>
 </head>
@@ -1273,6 +1349,8 @@ function showPage(id) {
     const isActive = b.dataset.mob === (MOB_GROUP[group] || id);
     b.style.color = isActive ? 'var(--purple)' : 'var(--text3)';
     b.style.borderTopColor = isActive ? 'var(--purple)' : 'transparent';
+    b.style.background = isActive ? 'var(--purple-light)' : 'transparent';
+    b.style.fontWeight = isActive ? '600' : '400';
   });
 }
 
