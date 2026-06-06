@@ -137,7 +137,7 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 
 ---
 
-## ✅ ĐÃ LÀM (cập nhật 2026-06-05)
+## ✅ ĐÃ LÀM (cập nhật 2026-06-06)
 
 ### Rate Limit vnstock — xử lý đúng (quan trọng!)
 - **Root cause**: vnstock Guest = **20 requests/phút**. Mỗi scan 1 mã tốn 4 API calls → sau 5 mã bị chặn
@@ -178,8 +178,8 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 - Countdown "Rate limit — chờ Xs" → "Đang chờ nguồn dữ liệu... (Xs)"
 
 ### Login Autofill
-- Username `binhpv` và PIN `1234` tự điền sẵn vào form login
-- Account `binhpv/1234` đã được tạo
+- Username `binhpv` và PIN `3564` tự điền sẵn vào form login
+- Account `binhpv` đã được tạo trên Railway DB
 
 ### Scan & Radar (session cũ)
 - `triggerRadar()` scan từng mã riêng qua `/api/radar/scan-one`, tuần tự, tránh rate limit
@@ -200,10 +200,61 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 - Mobile bottom nav: 2 nút
 
 ### Header
-- Nền tối `#0D1B2A`, đồng hồ real-time, icons giữa, tên user phải
+- Nền tím `#4A3F8F` (đổi từ đen), đồng hồ real-time, icons giữa, tên user + icon logout phải
+- Mobile (≤480px): ẩn đồng hồ, ẩn nút Hỗ trợ/Đổi mật khẩu
 
 ### Validator mã CP
 - Regex `/^[A-Z]{2,7}$/` — chỉ chữ cái, 2-7 ký tự
+
+### Session persistence (quan trọng!)
+- `SESSIONS` dict in-memory bị xóa khi Railway restart
+- **Fix**: thêm bảng `sessions` trong DB, lưu token khi login, lookup DB khi SESSIONS miss
+- `get_current_user()` → check SESSIONS → check DB → raise 401
+- `load_watchlist()` trả `[]` thay vì VN30_TOP10 khi không có data (tránh inject mã lạ)
+
+### Watchlist bugs fixed
+- **Bug thêm mã sau 1-2s**: bỏ localStorage cache — giờ chỉ dùng API
+- **Bug xóa HPG → MWG xuất hiện**: session expired → "default" user → VN30_TOP10 fallback → đã fix cả 2
+
+### Scan state management nâng cấp
+- `_scanState = 'idle' | 'scanning' | 'done'`
+- `_scanQueue = []`: thêm mã trong lúc đang scan → tự append vào cuối queue
+- `removeWl()`: không reset scanState khi đang scanning → nút Scan không bị stuck
+
+### Tab Kỹ Thuật — chart rendering
+- `makeChart()`: đọc width từ `.app-right` (luôn visible) thay vì container có thể hidden
+- `getComputedStyle(el).height` để đọc height đúng kể cả khi CSS mobile override
+- `resizeCharts()`: gọi sau 150ms + khi navigate về tab
+- **Browser cache bug**: GET `/api/technical` bị browser cache → thêm `?_=Date.now()` + `Cache-Control: no-store`
+- **Root cause đã xác nhận**: server trả đúng (90 rows, 6 signals), browser cache trả rỗng
+- ⚠️ **Vẫn còn bug**: tab kỹ thuật trắng trên mobile — chưa fix được, cần debug thêm
+
+### Report Tổng Hợp (📋 Báo cáo)
+- Click nút **Báo cáo** trên mỗi row trong bảng Radar → modal tổng hợp
+- **Backend** `POST /api/report/{ticker}`: cơ bản + kỹ thuật + tin tức + Claude AI
+- **fetch_news()**: DuckDuckGo HTML scraping (beautifulsoup4, no API key)
+- **Verdict badge**: từ `calc_combined_signal()` (thuật toán, không phụ thuộc AI)
+- **AI text**: LÝ DO (cơ bản/kỹ thuật/tin tức) + trade setup + rủi ro
+- **parseReport()**: full markdown renderer → H1/H2/H3, bold, bullet, KV rows, warning box
+- `ANTHROPIC_API_KEY` phải set trong Railway Variables
+- ROE/gross_margin đã là % từ compute_buffett_score, KHÔNG nhân thêm 100
+
+### UI/UX changes
+- Toast notification: sticky anchor trong app-right, không bị rơi ra ngoài cột
+- Bảng Radar: bỏ cột Ichimoku
+- Tab kỹ thuật: Tín hiệu hiện trước biểu đồ; bỏ stat grid (Giá/RSI/MACD)
+- Chuyển tab: auto-fetch khi switch sang Cơ bản hoặc Kỹ thuật nếu đã có mã
+- Scan ngầm khi chuyển tab (JS async không bị dừng)
+
+### Mobile Responsive
+- **≤768px**: sub-tabs scroll ngang, report modal slide up từ dưới, charts nhỏ hơn
+- **≤480px**: ẩn đồng hồ + nút header, ẩn cột Kỹ thuật/Giá trong bảng radar, card padding nhỏ hơn
+- Bottom nav: active state có background tím nhạt + bold
+
+### PWA
+- Service Worker: network-first cho HTML (luôn load bản mới), cache-first cho static assets
+- `skipWaiting()` + `clients.claim()`: SW update ngay khi deploy mới
+- User chỉ cần đóng app hoàn toàn rồi mở lại để có bản mới (không cần tạo lại PWA icon)
 
 ---
 
