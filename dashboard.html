@@ -461,8 +461,12 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     margin: 4px 8px;
     border: 1px solid var(--border);
   }
-  .fetch-row { flex-direction: column; }
-  .fetch-row .fg { flex: unset; width: 100%; }
+  .fetch-row { flex-direction: column; gap: 6px !important; }
+  /* flex-basis:auto để không chiếm height thừa trong column direction */
+  .fetch-row .fg { flex: 0 0 auto !important; width: 100% !important; }
+  .fetch-row > button { width: 100% !important; }
+  /* BCTC input: thu nhỏ padding để số không bị cắt */
+  .dr input { font-size: .62rem !important; padding: 4px 3px !important; }
   input, select { font-size: 16px !important; width: 100%; }
   .calc-grid { grid-template-columns: 1fr !important; }
   .calc-input-group { grid-template-columns: 1fr !important; }
@@ -853,7 +857,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
           </div>
           <div class="card">
             <div class="card-title">14 tiêu chí phân tích</div>
-            <table class="ct"><thead><tr><th>#</th><th>Tiêu chí</th><th>Ngưỡng</th><th>KQ</th><th>Nhận xét</th></tr></thead><tbody id="ctBody"></tbody></table>
+            <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ct"><thead><tr><th>#</th><th>Tiêu chí</th><th>Ngưỡng</th><th>KQ</th><th>Nhận xét</th></tr></thead><tbody id="ctBody"></tbody></table></div>
           </div>
           <div class="card">
             <div class="card-title">Giá trị thực — DCF</div>
