@@ -3185,9 +3185,8 @@ dcaLoad();
         </div>
       </div>
 
-      <!-- AI Report -->
-      <div class="ai-box" id="reportText"
-        style="white-space:pre-line;font-size:.84rem;line-height:1.65"></div>
+      <!-- AI Report parsed -->
+      <div id="reportBody"></div>
 
       <!-- Actions -->
       <div style="display:flex;gap:8px;margin-top:16px">
@@ -3257,7 +3256,99 @@ function renderReport(d) {
     ? `<span style="color:var(--yellow);font-size:1rem">⚠️</span>`
     : `<span style="color:var(--green);font-size:1rem">✓</span>`;
 
-  document.getElementById('reportText').textContent = d.report || '—';
+  document.getElementById('reportBody').innerHTML = parseReport(d.report || '', sig);
+}
+
+function md(text) {
+  // Inline markdown: **bold**, *italic*
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+function parseReport(text, sig) {
+  const lines = text.split('\n');
+  const vColor = sig.color==='green'?'var(--green)':sig.color==='red'?'var(--red)':'var(--yellow)';
+
+  // Extract các section đặc biệt
+  const extract = (key) => {
+    const r = new RegExp(`${key}\\s*:?\\s*(.+)`, 'i');
+    for (const l of lines) { const m = l.match(r); if (m) return m[1].trim(); }
+    return '';
+  };
+
+  const vuongMua   = extract('VÙNG MUA');
+  const mucTieu    = extract('MỤC TIÊU');
+  const catLo      = extract('CẮT LỖ');
+  const rr         = extract('RISK.REWARD');
+  const ruiro      = extract('RỦI RO');
+
+  // LÝ DO: lấy các bullet sau "## LÝ DO" hoặc "LÝ DO:"
+  let lyDo = [];
+  let inLyDo = false;
+  for (const l of lines) {
+    if (/LÝ DO/i.test(l)) { inLyDo = true; continue; }
+    if (inLyDo) {
+      if (/^##|^VÙNG MUA|^MỤC TIÊU|^CẮT LỖ|^RISK|^RỦI RO/i.test(l)) break;
+      const trimmed = l.replace(/^[-•]\s*/, '').trim();
+      if (trimmed) lyDo.push(trimmed);
+    }
+  }
+
+  let html = '';
+
+  // LÝ DO section
+  if (lyDo.length) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Lý do</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    lyDo.forEach(r => {
+      // Detect section header (bold line không có gạch đầu dòng)
+      if (/^\*\*\d+\./.test(r) || /^[0-9]+\./.test(r)) {
+        html += `<div style="font-size:.82rem;font-weight:600;color:var(--text1);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${md(r)}</div>`;
+      } else {
+        html += `<div style="display:flex;gap:8px;align-items:flex-start;font-size:.82rem;color:var(--text2);line-height:1.5">
+          <span style="color:var(--purple);flex-shrink:0;margin-top:2px">›</span>
+          <span>${md(r)}</span>
+        </div>`;
+      }
+    });
+    html += `</div></div>`;
+  }
+
+  // Trade setup grid
+  if (vuongMua || mucTieu || catLo || rr) {
+    const items = [
+      { l:'Vùng mua', v:vuongMua, c:'var(--green)' },
+      { l:'Mục tiêu (TP)', v:mucTieu, c:'var(--green)' },
+      { l:'Cắt lỗ (SL)', v:catLo, c:'var(--red)' },
+      { l:'Risk/Reward', v:rr, c:'var(--purple)' },
+    ].filter(x => x.v);
+
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Kế hoạch giao dịch</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">`;
+    items.forEach(({ l, v, c }) => {
+      html += `<div style="background:var(--bg);border-radius:10px;padding:10px 12px;border:1px solid var(--border)">
+        <div style="font-size:.68rem;color:var(--text3);margin-bottom:3px">${l}</div>
+        <div style="font-size:.88rem;font-weight:700;color:${c}">${md(v)}</div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // Rủi ro
+  if (ruiro) {
+    html += `<div style="background:#fff8ed;border-radius:10px;padding:10px 14px;border:1px solid #f5c842;display:flex;gap:10px;align-items:flex-start">
+      <span style="font-size:1.1rem;flex-shrink:0">⚠️</span>
+      <div>
+        <div style="font-size:.7rem;font-weight:700;color:#b45309;margin-bottom:2px">Rủi ro cần theo dõi</div>
+        <div style="font-size:.82rem;color:#92400e;line-height:1.5">${md(ruiro)}</div>
+      </div>
+    </div>`;
+  }
+
+  return html || `<div style="font-size:.84rem;color:var(--text2);white-space:pre-line">${text}</div>`;
 }
 
 function closeReport() {
