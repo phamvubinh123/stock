@@ -2142,9 +2142,8 @@ async function fetchTA() {
     signalLineSeries.setData(signalData);
 
     [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c.timeScale().fitContent();}catch(_){}});
-    // Force resize sau khi DOM paint xong — mobile cần thêm 1 lần nữa sau 500ms
-    setTimeout(resizeCharts, 150);
-    setTimeout(resizeCharts, 500);
+    // ResizeObserver tự xử lý resize — chỉ cần 1 timeout nhỏ cho fitContent sau resize
+    setTimeout(()=>{ resizeCharts(); [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c.timeScale().fitContent();}catch(_){}}); }, 200);
     [_chartCandle,_chartRsi,_chartMacd].forEach(src=>{
       src.timeScale().subscribeVisibleLogicalRangeChange(range=>{
         if(!range) return;
