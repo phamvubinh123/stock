@@ -461,8 +461,8 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
     margin: 4px 8px;
     border: 1px solid var(--border);
   }
-  .fetch-row { flex-direction: column; }
-  .fetch-row .fg { flex: unset; width: 100%; }
+  .fetch-row { flex-direction: column; gap: 6px !important; }
+  .fetch-row .fg, .fetch-row > div, .fetch-row > button { flex: unset !important; width: 100% !important; }
   input, select { font-size: 16px !important; width: 100%; }
   .calc-grid { grid-template-columns: 1fr !important; }
   .calc-input-group { grid-template-columns: 1fr !important; }
@@ -517,6 +517,17 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 
   /* Card margin giảm */
   .ai-box { margin: 6px 8px; }
+
+  /* Bảng nhập BCTC: thu nhỏ padding để số không bị cắt */
+  .dr { grid-template-columns: 1.8fr repeat(4, 1fr); }
+  .dr input { font-size: .62rem !important; padding: 4px 3px !important; }
+  .dr-lbl { font-size: .7rem; }
+
+  /* Bảng tiêu chí Buffett: scroll ngang thay vì tràn */
+  .ct { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ct thead, .ct tbody, .ct tr { display: table; width: 100%; table-layout: fixed; }
+  .ct td:last-child { min-width: 180px; }
+  .ct td:last-child > div { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 }
 
 @media (max-width: 480px) {
