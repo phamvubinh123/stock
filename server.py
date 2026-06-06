@@ -1691,10 +1691,11 @@ def get_technical(ticker: str, period: int = Query(90)):
 
         ticker = ticker.upper()
         cache_key = f"technical:{ticker}:{period}"
-        cached = cache_get(cache_key)
-        if cached:
-            log.info(f"[CACHE HIT] {cache_key}")
-            return ok(cached)
+        # Tạm bỏ cache để debug
+        # cached = cache_get(cache_key)
+        # if cached:
+        #     log.info(f"[CACHE HIT] {cache_key}")
+        #     return ok(cached)
         end_date = str(datetime.date.today())
         start_date = str(datetime.date.today() - datetime.timedelta(days=period * 2))
 
@@ -1842,6 +1843,10 @@ def get_technical(ticker: str, period: int = Query(90)):
         signals.insert(0, verdict)
 
         cols = ["time","open","high","low","close","volume","rsi","macd","macd_signal","macd_hist","ma20","ma50","bb_upper","bb_mid","bb_lower"]
+        missing_cols = [c for c in cols if c not in df.columns]
+        log.info(f"[TECH] {ticker} df.shape={df.shape} cols_ok={not missing_cols} missing={missing_cols} signals={len(signals)} price={price}")
+        if missing_cols:
+            log.warning(f"[TECH] {ticker} missing columns: {missing_cols}, df.columns={list(df.columns)}")
         payload = {
             "ticker": ticker, "period": period,
             "exchange": detect_exchange(ticker),
