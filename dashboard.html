@@ -1895,7 +1895,7 @@ function makeChart(containerId, opts={}) {
   const h = parseInt(el.style.height) || 200;
   const chart = LightweightCharts.createChart(el, {
     width: w, height: h,
-    layout:{ background:{color:'#fff'}, textColor:'#555' },
+    layout:{ background:{color:'#f8f8ff'}, textColor:'#555' },
     grid:{ vertLines:{color:'#f0f0f0'}, horzLines:{color:'#f0f0f0'} },
     crosshair:{ mode: LightweightCharts.CrosshairMode.Normal },
     rightPriceScale:{ borderColor:'#e0e0e0' },
@@ -2000,6 +2000,10 @@ async function fetchTA() {
   // ── Vẽ chart (try riêng, không ảnh hưởng signals nếu lỗi)
   try {
     if (typeof LightweightCharts === 'undefined') throw new Error('Thư viện LightweightCharts chưa tải (CDN lỗi)');
+    const _dbgW = _getChartWidth();
+    const _dbgEl = document.getElementById('chartCandle');
+    const _dbgInfo = `w=${_dbgW} offsetW=${_dbgEl?.offsetWidth} taResult=${document.getElementById('taResult')?.style.display}`;
+    document.getElementById('taChartTitle').title = _dbgInfo; // hover để xem
     destroyCharts();
 
     _chartCandle = makeChart('chartCandle');

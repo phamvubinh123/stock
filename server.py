@@ -1453,8 +1453,8 @@ async def get_report(ticker: str, request: Request):
         fundamental = {
             "score":       score.get("score", 0),
             "key_metrics": {
-                "roe":          round(km.get("roe", 0) * 100, 1) if isinstance(km.get("roe"), float) else km.get("roe", "N/A"),
-                "gross_margin": round(km.get("gross_margin", 0) * 100, 1) if isinstance(km.get("gross_margin"), float) else km.get("gross_margin", "N/A"),
+                "roe":          km.get("roe", "N/A"),          # đã là % từ compute_buffett_score
+                "gross_margin": km.get("gross_margin", "N/A"), # đã là %
                 "pe":           round(km.get("pe", 0), 1) if isinstance(km.get("pe"), (int, float)) else km.get("pe", "N/A"),
                 "dcf":          round(km.get("dcf", 0) / 1000, 1) if isinstance(km.get("dcf"), (int, float)) and km.get("dcf") else "N/A",
             },
