@@ -1879,11 +1879,13 @@ function destroyCharts() {
 }
 
 function _getChartWidth() {
-  // Đọc width thực từ app-right (luôn visible, không bị ảnh hưởng page show/hide)
+  // Ưu tiên đọc từ container thật nếu visible
+  const el = document.getElementById('chartCandle');
+  if (el && el.offsetWidth > 50) return el.offsetWidth;
+  // Fallback: app-right đã là right panel (không bao gồm sidebar)
   const appRight = document.querySelector('.app-right');
-  const sidebar  = document.querySelector('.bottom-nav');
-  const sidebarW = sidebar ? sidebar.offsetWidth : 220;
-  return (appRight ? appRight.offsetWidth : window.innerWidth) - sidebarW - 32;
+  const w = appRight ? appRight.offsetWidth : window.innerWidth;
+  return Math.max(w - 32, 300);
 }
 
 function makeChart(containerId, opts={}) {
@@ -1997,6 +1999,7 @@ async function fetchTA() {
 
   // ── Vẽ chart (try riêng, không ảnh hưởng signals nếu lỗi)
   try {
+    if (typeof LightweightCharts === 'undefined') throw new Error('Thư viện LightweightCharts chưa tải (CDN lỗi)');
     destroyCharts();
 
     _chartCandle = makeChart('chartCandle');
@@ -2043,7 +2046,10 @@ async function fetchTA() {
     });
   } catch(chartErr) {
     console.error('Chart render error:', chartErr);
-    // Signals đã hiện rồi, chỉ log lỗi chart — không overwrite signals
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'color:var(--red);font-size:.78rem;padding:8px 12px;background:var(--red-bg);border-radius:8px;margin-top:8px';
+    errDiv.textContent = '⚠ Không vẽ được biểu đồ: ' + (chartErr.message || chartErr);
+    document.getElementById('taSignals').appendChild(errDiv);
   }
 }
 
@@ -2557,7 +2563,7 @@ function radarRow(r) {
       </td>
       <td colspan="6" style="padding:9px 8px;color:var(--muted);font-size:.78rem">Chưa scan — nhấn Scan để cập nhật</td>
       <td style="text-align:center;padding:9px 6px;white-space:nowrap">
-        <button class="btn-row" onclick="openReport('${r.ticker}')" style="background:var(--purple-light);color:var(--purple);font-weight:600">📋 Report</button>
+        <button class="btn-row" onclick="openReport('${r.ticker}')" style="background:var(--purple-light);color:var(--purple);font-weight:600">📋 Báo cáo</button>
         <button class="btn-row" style="margin-left:4px" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
         <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
       </td>
@@ -2583,7 +2589,7 @@ function radarRow(r) {
         background:${ac.bg};color:${ac.fg}">${sig.action}</span>
     </td>
     <td style="text-align:center;padding:9px 6px;white-space:nowrap">
-      <button class="btn-row" onclick="openReport('${r.ticker}')" style="background:var(--purple-light);color:var(--purple);font-weight:600">📋 Report</button>
+      <button class="btn-row" onclick="openReport('${r.ticker}')" style="background:var(--purple-light);color:var(--purple);font-weight:600">📋 Báo cáo</button>
       <button class="btn-row" style="margin-left:4px" onclick="openInBuffett('${r.ticker}')">📊 Cơ bản</button>
       <button class="btn-row" style="margin-left:4px" onclick="openInTechnical('${r.ticker}')">📈 Kỹ thuật</button>
     </td>
@@ -3295,14 +3301,13 @@ function parseReport(text, sig) {
       continue;
     }
 
-    // H2 — check if it's VERDICT line
-    if (line.startsWith('## ')) {
-      const t = line.slice(3);
+    // H2 / H3 — check if it's VERDICT line
+    if (/^#{2,3} /.test(line)) {
+      const t = line.replace(/^#{2,3} /, '');
       if (/VERDICT/i.test(t)) {
-        // Extract verdict word
+        // Chỉ hiện badge, không hiện label "VERDICT"
         const v = t.replace(/VERDICT\s*:?\s*/i,'').replace(/\*\*/g,'').trim();
-        html += `<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
-          <span style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">Verdict</span>
+        html += `<div style="margin:8px 0">
           <span style="padding:3px 14px;border-radius:20px;background:${vColor}20;border:1px solid ${vColor};font-weight:700;font-size:.88rem;color:${vColor}">${v}</span>
         </div>`;
       } else {
