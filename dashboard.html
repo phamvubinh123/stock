@@ -1967,13 +1967,17 @@ async function fetchTA() {
 
   // ── Render signals (luôn hiện dù chart lỗi)
   const hist=d.history||[];
+  // DEBUG: hiện số dòng data nhận được
+  const _debugInfo = `hist=${hist.length} signals=${(d.signals||[]).length} close=${d.latest?.close} period=${period}`;
   const sigColors={bull:{bg:'var(--green-bg)',fg:'var(--green)',icon:'▲'},bear:{bg:'var(--red-bg)',fg:'var(--red)',icon:'▼'},neutral:{bg:'#f5f5f5',fg:'var(--muted)',icon:'●'}};
-  document.getElementById('taSignals').innerHTML=(d.signals||[]).length
-    ?(d.signals||[]).map(s=>{
-      const c=sigColors[s.type]||sigColors.neutral;
-      return `<div style="padding:8px 12px;background:${c.bg};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${c.fg};display:flex;gap:8px;align-items:center"><span>${c.icon}</span><span>${s.text||s}</span></div>`;
-    }).join('')
-    :'<div class="empty" style="padding:20px">Không có tín hiệu</div>';
+  document.getElementById('taSignals').innerHTML=
+    `<div style="font-size:.7rem;color:var(--muted);padding:4px 8px;background:#f0f0f0;border-radius:4px;margin-bottom:8px;font-family:monospace">${_debugInfo}</div>` +
+    ((d.signals||[]).length
+      ?(d.signals||[]).map(s=>{
+        const c=sigColors[s.type]||sigColors.neutral;
+        return `<div style="padding:8px 12px;background:${c.bg};border-radius:8px;margin-bottom:6px;font-size:.82rem;color:${c.fg};display:flex;gap:8px;align-items:center"><span>${c.icon}</span><span>${s.text||s}</span></div>`;
+      }).join('')
+      :'<div class="empty" style="padding:20px">Không có tín hiệu</div>');
   document.getElementById('taChartTitle').textContent=ma;
 
     // Build chart data — dedup theo ngày (giữ row cuối cùng mỗi ngày)
