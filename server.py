@@ -1420,18 +1420,24 @@ TIN TỨC GẦN ĐÂY:
 {STREET_SMART_RULES}
 
 === YÊU CẦU ===
-Trả lời theo đúng format sau, tiếng Việt, súc tích:
-
-VERDICT: [MUA / CHỜ / TRÁNH]
+Trả lời theo đúng format sau, tiếng Việt, súc tích.
+(Không cần ghi VERDICT — hệ thống đã tính điểm tự động)
 
 LÝ DO:
-- [lý do 1 — cơ bản]
-- [lý do 2 — kỹ thuật]
-- [lý do 3 — tin tức/ngữ cảnh]
+### 1. Cơ bản
+- [lý do cơ bản 1]
+- [lý do cơ bản 2]
+
+### 2. Kỹ thuật
+- [lý do kỹ thuật 1]
+- [lý do kỹ thuật 2]
+
+### 3. Tin tức & Ngữ cảnh
+- [lý do từ tin tức]
 
 VÙNG MUA: [giá từ - đến, đơn vị nghìn đồng]
-MỤC TIÊU: [TP, nghìn đồng] (+x%)
-CẮT LỖ: [SL, nghìn đồng] (-x%)
+MỤC TIÊU: [TP nghìn đồng] (+x%)
+CẮT LỖ: [SL nghìn đồng] (-x%)
 RISK/REWARD: [1:x]
 
 RỦI RO: [1 rủi ro quan trọng nhất cần theo dõi]

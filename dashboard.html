@@ -1982,7 +1982,9 @@ function makeChart(containerId, opts={}) {
   el.innerHTML='';
   const w = Math.max(_getChartWidth(), 300);
   // Dùng getComputedStyle để đọc height thật (kể cả khi bị override bởi CSS mobile)
-  const h = parseInt(getComputedStyle(el).height) || parseInt(el.style.height) || 200;
+  const computedH = parseInt(getComputedStyle(el).height);
+  const h = (computedH > 0 ? computedH : null) || parseInt(el.style.height) || 200;
+  document.getElementById('taChartTitle').title = `w=${w} h=${h} computedH=${computedH}`;
   const chart = LightweightCharts.createChart(el, {
     width: w, height: h,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
