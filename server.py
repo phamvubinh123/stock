@@ -1475,12 +1475,13 @@ async def get_report(ticker: str, request: Request):
     # 4. Claude API
     report_text = ""
     try:
+        import httpx as _httpx
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             report_text = "(Cần ANTHROPIC_API_KEY để tạo report AI)"
         else:
             prompt = build_report_prompt(ticker, fundamental, technical, news_summary)
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with _httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={"Content-Type": "application/json",
