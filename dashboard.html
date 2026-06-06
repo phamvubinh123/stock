@@ -1963,6 +1963,10 @@ function tfToPeriod(tf) {
 }
 
 function destroyCharts() {
+  ['chartCandle','chartRsi','chartMacd'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el?._ro){el._ro.disconnect();el._ro=null;}
+  });
   [_chartCandle,_chartRsi,_chartMacd].forEach(c=>{try{c&&c.remove();}catch{}});
   _chartCandle=_chartRsi=_chartMacd=null;
 }
@@ -1981,11 +1985,12 @@ function _getChartWidth() {
 function makeChart(containerId, opts={}) {
   const el = document.getElementById(containerId);
   el.innerHTML='';
-  const w = Math.max(_getChartWidth(), 300);
-  // Dùng getComputedStyle để đọc height thật (kể cả khi bị override bởi CSS mobile)
+  // clientWidth là reliable nhất — đọc sau khi DOM đã paint
+  const w = Math.max(el.clientWidth || _getChartWidth(), 300);
   const computedH = parseInt(getComputedStyle(el).height);
   const h = (computedH > 0 ? computedH : null) || parseInt(el.style.height) || 200;
-  document.getElementById('taChartTitle').title = `w=${w} h=${h} computedH=${computedH}`;
+  console.log(`[chart] ${containerId}: w=${w} h=${h} clientW=${el.clientWidth} offsetW=${el.offsetWidth}`);
+  document.getElementById('taChartTitle').title = `w=${w} h=${h} clientW=${el.clientWidth}`;
   const chart = LightweightCharts.createChart(el, {
     width: w, height: h,
     layout:{ background:{color:'#fff'}, textColor:'#555' },
@@ -1996,6 +2001,15 @@ function makeChart(containerId, opts={}) {
     handleScroll:true, handleScale:true,
     ...opts
   });
+  // ResizeObserver: tự resize khi container thay đổi kích thước
+  if (window.ResizeObserver) {
+    if (el._ro) { el._ro.disconnect(); }
+    el._ro = new ResizeObserver(() => {
+      const nw = el.clientWidth;
+      if (nw > 50) try { chart.resize(nw, h); } catch(_) {}
+    });
+    el._ro.observe(el);
+  }
   return chart;
 }
 
