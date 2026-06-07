@@ -2199,7 +2199,7 @@ let dcaData = {}; // { TICKER: [{shares, price, date}] }
 
 async function dcaLoad() {
   try {
-    const r = await fetch('/api/dca');
+    const r = await fetch('/api/dca', { headers: {'X-Token': authToken} });
     dcaData = await r.json();
     dcaRenderPortfolio();
     dcaInitForm();
@@ -2317,16 +2317,20 @@ async function dcaSave() {
   });
   if (!txs.length) { alert('Vui lòng nhập ít nhất 1 dòng hợp lệ'); return; }
   dcaData[ticker] = txs;
-  await fetch('/api/dca', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dcaData) });
+  await fetch('/api/dca', { method:'POST', headers:{'Content-Type':'application/json','X-Token':authToken}, body: JSON.stringify(dcaData) });
   dcaRenderPortfolio();
   dcaClearForm();
+  loadPortfolioSummary(); // refresh P&L sau khi lưu
 }
 
 async function dcaDelete(ticker) {
   if (!confirm(`Xóa ${ticker} khỏi danh sách?`)) return;
   delete dcaData[ticker];
-  await fetch(`/api/dca/${ticker}`, { method:'DELETE' });
+  _pnlSummaryMap = {}; // clear cache để row không hiện P&L cũ
+  await fetch(`/api/dca/${ticker}`, { method:'DELETE', headers:{'X-Token':authToken} });
   dcaRenderPortfolio();
+  if (Object.keys(dcaData).length) loadPortfolioSummary();
+  else document.getElementById('pnlSummaryCard').style.display='none';
 }
 
 // ═══════════════════════════════════════════
