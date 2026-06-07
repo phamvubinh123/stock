@@ -2533,7 +2533,9 @@ async def portfolio_summary(request: Request):
             df = await loop.run_in_executor(
                 None, lambda t=ticker: Quote(symbol=t, source="KBS").history(start=m_ago, end=today)
             )
-            price = float(df["close"].iloc[-1]) if df is not None and not df.empty else 0
+            # vnstock trả về giá theo nghìn VNĐ (75.0 = 75,000đ)
+            # avg_price lưu theo VNĐ đầy đủ (84500) → nhân 1000 để khớp đơn vị
+            price = float(df["close"].iloc[-1]) * 1000 if df is not None and not df.empty else 0
             cache_set(ck, price)
             return price
         except Exception:
@@ -2563,8 +2565,10 @@ async def portfolio_summary(request: Request):
     items.sort(key=lambda x: abs(x["value"]), reverse=True)
     total_pnl     = total_value - total_cost
     total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
+    total_shares  = sum(it["shares"] for it in items)
     return ok({
         "items":         items,
+        "total_shares":  round(total_shares, 0),
         "total_cost":    round(total_cost, 1),
         "total_value":   round(total_value, 1),
         "total_pnl":     round(total_pnl, 1),

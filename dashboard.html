@@ -2555,10 +2555,13 @@ async function loadPortfolioSummary() {
     document.getElementById('pnlSummaryCard').style.display='block';
     const pnlClr = data.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
     const pnlSign = data.total_pnl >= 0 ? '+' : '';
+    // fmtN: hiển thị số thuần theo nghìn VNĐ, không suffix
+    const fmtN = (x, dec=0) => fmt(Math.round(x/1000), dec);
     document.getElementById('pnlStats').innerHTML = [
-      {v: fmt(data.total_cost/1e3,1)+'B', l:'Vốn bỏ vào'},
-      {v: fmt(data.total_value/1e3,1)+'B', l:'Giá trị hiện tại'},
-      {v: pnlSign+fmt(data.total_pnl/1e3,1)+'B', l:'Lãi/Lỗ', cls: data.total_pnl>=0?'cg':'cr'},
+      {v: fmt(data.total_shares||0,0),    l:'KL nắm giữ (CP)'},
+      {v: fmtN(data.total_cost),          l:'Vốn bỏ vào (nghìn)'},
+      {v: fmtN(data.total_value),         l:'Giá trị hiện tại (nghìn)'},
+      {v: pnlSign+fmtN(data.total_pnl),  l:'Lãi/Lỗ (nghìn)', cls: data.total_pnl>=0?'cg':'cr'},
       {v: pnlSign+fmt(data.total_pnl_pct,2)+'%', l:'% Thay đổi', cls: data.total_pnl>=0?'cg':'cr'},
     ].map(s=>`<div class="stat"><div class="stat-val ${s.cls||''}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
 
@@ -2568,10 +2571,10 @@ async function loadPortfolioSummary() {
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.83rem">
         <div style="flex:0 0 50px;font-weight:700">${item.ticker}</div>
         <div style="flex:1;color:var(--muted)">
-          ${fmt(item.shares,0)} CP · TB ${fmt(item.avg_price,1)}k → <b>${fmt(item.cur_price,1)}k</b>
+          ${fmt(item.shares,0)} CP · TB ${fmt(item.avg_price,0)} → <b>${fmt(item.cur_price,0)}</b>
         </div>
         <div style="text-align:right;font-weight:600;color:${clr}">
-          ${sign}${fmt(item.pnl/1e3,1)}B <span style="font-size:.75rem">(${sign}${fmt(item.pnl_pct,1)}%)</span>
+          ${sign}${fmtN(item.pnl)} <span style="font-size:.75rem">(${sign}${fmt(item.pnl_pct,1)}%)</span>
         </div>
       </div>`;
     }).join('');
