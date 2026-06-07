@@ -898,14 +898,6 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
             <div style="margin-top:12px" id="pnlRows"></div>
           </div>
 
-          <!-- Danh sách portfolio -->
-          <div class="card" id="dcaPortfolioCard">
-            <div class="card-title">Danh mục trung bình giá</div>
-            <div id="dcaPortfolioList">
-              <div class="empty" style="font-size:.8rem">Chưa có dữ liệu — thêm giao dịch bên dưới.</div>
-            </div>
-          </div>
-
           <!-- Form thêm giao dịch -->
           <div class="card">
             <div class="card-title">Thêm giao dịch</div>
@@ -928,6 +920,14 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn btn-primary" onclick="dcaSave()" style="flex:1">💾 Lưu kết quả</button>
               <button class="btn" onclick="dcaClearForm()" style="flex:1">Xóa form</button>
+            </div>
+          </div>
+
+          <!-- Danh sách portfolio -->
+          <div class="card" id="dcaPortfolioCard">
+            <div class="card-title">Danh mục trung bình giá</div>
+            <div id="dcaPortfolioList">
+              <div class="empty" style="font-size:.8rem">Chưa có dữ liệu — thêm giao dịch bên trên.</div>
             </div>
           </div>
         </div>
@@ -2220,10 +2220,12 @@ function dcaRenderPortfolio() {
     el.innerHTML = `<div class="empty" style="font-size:.8rem">Chưa có dữ liệu — thêm giao dịch bên dưới.</div>`;
     return;
   }
+  const fmtVND = x => Math.round(x).toLocaleString('vi-VN');
   el.innerHTML = tickers.map(ticker => {
     const txs = dcaData[ticker] || [];
     const { totalShares, avgPrice } = dcaCalcAvg(txs);
     const totalCost = totalShares * avgPrice;
+    const pnlItem = _pnlSummaryMap[ticker];
     const children = txs.map((t, i) => `
       <div class="dca-child">
         <span>Lần ${i+1}:</span>
@@ -2231,14 +2233,29 @@ function dcaRenderPortfolio() {
         <span>@ <span style="font-weight:600">${Math.round(t.price).toLocaleString('vi-VN')}</span></span>
         ${t.date ? `<span style="color:var(--text3)">${t.date}</span>` : ''}
       </div>`).join('');
+
+    // Giá trị TT + Lỗ/Lãi (nếu đã load P&L summary)
+    let pnlHtml = '';
+    if (pnlItem) {
+      const clr = pnlItem.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const sign = pnlItem.pnl >= 0 ? '+' : '';
+      pnlHtml = `
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">
+          Giá TT: <b style="color:var(--text)">${fmtVND(pnlItem.cur_price)}</b>
+          &nbsp;·&nbsp;
+          <span style="color:${clr};font-weight:600">${sign}${fmtVND(pnlItem.pnl)} (${sign}${fmt(pnlItem.pnl_pct,1)}%)</span>
+        </div>`;
+    }
+
     return `
       <div class="dca-row" id="dca-row-${ticker}">
         <div class="dca-header" onclick="dcaToggle('${ticker}')">
           <div class="dca-ticker">${ticker}</div>
-          <div class="dca-stats">
-            <div>Tổng CP: <span>${totalShares.toLocaleString('vi-VN')}</span></div>
-            <div>Giá TB: <span>${Math.round(avgPrice).toLocaleString('vi-VN')}</span></div>
-            <div>Tổng vốn: <span>${Math.round(totalCost).toLocaleString('vi-VN')}</span></div>
+          <div class="dca-stats" style="flex:1">
+            <div>Tổng CP: <span>${fmtVND(totalShares)}</span></div>
+            <div>Giá TB: <span>${fmtVND(avgPrice)}</span></div>
+            <div>Tổng vốn: <span>${fmtVND(totalCost)}</span></div>
+            ${pnlHtml ? `<div style="grid-column:1/-1">${pnlHtml}</div>` : ''}
           </div>
           <button class="btn btn-sm" onclick="event.stopPropagation();dcaLoadToForm('${ticker}')" style="font-size:.7rem;padding:3px 8px">+ Thêm GD</button>
           <button class="btn btn-sm" onclick="event.stopPropagation();dcaDelete('${ticker}')" style="font-size:.7rem;padding:3px 8px;color:var(--red);border-color:var(--red)">Xóa</button>
@@ -2283,8 +2300,8 @@ function dcaLoadToForm(ticker) {
   tbody.innerHTML = '';
   (dcaData[ticker] || []).forEach(t => dcaAddRow(t.shares, t.price));
   dcaAddRow(); // dòng trống để thêm mới
-  // Scroll xuống form
-  document.getElementById('dcaFormTicker').scrollIntoView({behavior:'smooth'});
+  // Scroll lên form (form đã nằm trên danh mục)
+  document.getElementById('dcaFormTicker').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 async function dcaSave() {
@@ -2547,6 +2564,8 @@ setInterval(loadTriggeredAlerts, 60000);
 // ═══════════════════════════════════════════
 // PORTFOLIO P&L SUMMARY (Phase 4.2)
 // ═══════════════════════════════════════════
+let _pnlSummaryMap = {}; // ticker → {cur_price, pnl, pnl_pct}
+
 async function loadPortfolioSummary() {
   try {
     const r = await fetch('/api/portfolio/summary', { headers: {'X-Token': authToken} });
@@ -2556,8 +2575,12 @@ async function loadPortfolioSummary() {
     document.getElementById('pnlSummaryCard').style.display='block';
     const pnlClr = data.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
     const pnlSign = data.total_pnl >= 0 ? '+' : '';
-    // fmtVND: số VNĐ đầy đủ với phân cách nghìn, không suffix
     const fmtVND = x => Math.round(x).toLocaleString('vi-VN');
+
+    // Cache để dcaRenderPortfolio dùng
+    _pnlSummaryMap = {};
+    data.items.forEach(item => { _pnlSummaryMap[item.ticker] = item; });
+
     document.getElementById('pnlStats').innerHTML = [
       {v: fmt(data.total_shares||0,0),       l:'KL nắm giữ (CP)'},
       {v: fmtVND(data.total_cost),           l:'Vốn bỏ vào'},
@@ -2566,19 +2589,8 @@ async function loadPortfolioSummary() {
       {v: pnlSign+fmt(data.total_pnl_pct,2)+'%', l:'% Thay đổi', cls: data.total_pnl>=0?'cg':'cr'},
     ].map(s=>`<div class="stat"><div class="stat-val ${s.cls||''}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
 
-    document.getElementById('pnlRows').innerHTML = data.items.map(item => {
-      const clr = item.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const sign = item.pnl >= 0 ? '+' : '';
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.83rem">
-        <div style="flex:0 0 50px;font-weight:700">${item.ticker}</div>
-        <div style="flex:1;color:var(--muted)">
-          ${fmt(item.shares,0)} CP · TB ${fmtVND(item.avg_price)} → <b>${fmtVND(item.cur_price)}</b>
-        </div>
-        <div style="text-align:right;font-weight:600;color:${clr}">
-          ${sign}${fmtVND(item.pnl)} <span style="font-size:.75rem">(${sign}${fmt(item.pnl_pct,1)}%)</span>
-        </div>
-      </div>`;
-    }).join('');
+    // Re-render danh mục để hiện Giá TT + Lỗ/Lãi
+    dcaRenderPortfolio();
   } catch(e) { console.error('Portfolio summary error', e); }
 }
 
