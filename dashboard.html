@@ -1941,8 +1941,9 @@ async function removeWl(ticker) {
     // Chỉ xóa row radar, KHÔNG reset scanState hay clear UI khi đang scan
     document.querySelector(`#radarContainer tr[data-ticker="${ticker}"]`)?.remove();
     if (remaining.length === 0 && _scanState !== 'scanning') {
-      _scanState = 'idle';
-      _showEmptyPrompt('Nhập mã cổ phiếu và nhấn <strong>🔍 Scan</strong> để bắt đầu phân tích');
+      // Giữ 'done' để add mới sẽ tự scan — chỉ reset 'idle' khi chưa scan lần nào
+      if (_scanState !== 'done') _scanState = 'idle';
+      _showEmptyPrompt('Nhập mã cổ phiếu để bắt đầu phân tích');
     }
   } catch {}
 }
@@ -3183,7 +3184,8 @@ async function addTicker(ticker) {
   if (tbody.querySelector(`tr[data-ticker="${t}"]`)) return;
 
   {
-    // Đã scan trước đó → scan ngay mã mới và thêm kết quả vào bảng
+    // Đã scan trước đó → show radar container (có thể đang ẩn do list trống) rồi scan
+    _showRadar(true);
     const tr = document.createElement('tr');
     tr.dataset.ticker = t;
     tr.style.borderBottom = '1px solid var(--border)';
