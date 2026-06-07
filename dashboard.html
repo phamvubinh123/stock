@@ -1678,6 +1678,13 @@ function openInBuffett(ticker) {
   document.getElementById('maCP').value = ticker;
   document.getElementById('taMA').value = ticker;
   showPage('buffett');
+  // Clear data cũ ngay lập tức — tránh hiển thị số liệu của mã trước
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('deepDiveCard').style.display = 'none';
+  document.querySelectorAll('#page-buffett .dr input').forEach(el => el.value = '');
+  ['tenCty','giaHT','giaSS','klLH'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
   fetchData();
 }
 
@@ -1685,6 +1692,12 @@ function openInTechnical(ticker) {
   document.getElementById('taMA').value = ticker;
   document.getElementById('maCP').value = ticker;
   showPage('technical');
+  // Clear chart + signals cũ ngay lập tức
+  destroyCharts();
+  document.getElementById('taChartTitle').textContent = ticker;
+  document.getElementById('taSignals').innerHTML =
+    '<div style="color:var(--muted);font-size:.82rem;padding:8px;text-align:center"><span class="spinner"></span> Đang tải dữ liệu...</div>';
+  document.getElementById('taResult').style.display = 'block';
   fetchTA();
 }
 
