@@ -137,7 +137,7 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 
 ---
 
-## ✅ ĐÃ LÀM (cập nhật 2026-06-06)
+## ✅ ĐÃ LÀM (cập nhật 2026-06-07)
 
 ### Rate Limit vnstock — xử lý đúng (quan trọng!)
 - **Root cause**: vnstock Guest = **20 requests/phút**. Mỗi scan 1 mã tốn 4 API calls → sau 5 mã bị chặn
@@ -221,13 +221,31 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 - `_scanQueue = []`: thêm mã trong lúc đang scan → tự append vào cuối queue
 - `removeWl()`: không reset scanState khi đang scanning → nút Scan không bị stuck
 
-### Tab Kỹ Thuật — chart rendering
-- `makeChart()`: đọc width từ `.app-right` (luôn visible) thay vì container có thể hidden
-- `getComputedStyle(el).height` để đọc height đúng kể cả khi CSS mobile override
-- `resizeCharts()`: gọi sau 150ms + khi navigate về tab
-- **Browser cache bug**: GET `/api/technical` bị browser cache → thêm `?_=Date.now()` + `Cache-Control: no-store`
-- **Root cause đã xác nhận**: server trả đúng (90 rows, 6 signals), browser cache trả rỗng
-- ⚠️ **Vẫn còn bug**: tab kỹ thuật trắng trên mobile — chưa fix được, cần debug thêm
+### Tab Kỹ Thuật — chart rendering (đã fix hoàn toàn)
+- **Root cause**: `makeChart()` đọc `offsetWidth` khi DOM chưa paint → trả 0 → chart blank
+- **Fix**: dùng `el.clientWidth` trực tiếp từ container sau `await requestAnimationFrame()`
+- **Fix**: thêm `ResizeObserver` — tự resize chart khi container thay đổi kích thước
+- `destroyCharts()`: disconnect ResizeObserver trước khi destroy
+- `_getChartWidth()`: fallback `window.innerWidth - 40` trên mobile nếu clientWidth = 0
+- **Cache bug**: server không cache `history: []` (empty) — tự động re-fetch thay vì serve bad data
+- Fix này stable: không dùng setTimeout để đọc dimensions, ResizeObserver lo hết
+
+### Radar State Management — nâng cấp thêm (2026-06-07)
+- **Bug cũ**: xóa hết list → `_scanState='idle'` → add mới → không tự scan
+- **Fix**: `removeWl()` giữ `_scanState='done'` khi list trống (chỉ reset về 'idle' lúc khởi động)
+- `addTicker()` (state=done): gọi `_showRadar(true)` trước khi append row — vì container bị ẩn sau `_showEmptyPrompt`
+- **Behaviour mới**: sau khi user scan 1 lần, add/xóa bất kỳ mã nào đều tự scan, không cần nhấn Scan lại
+
+### Switch mã — clear data cũ ngay lập tức
+- `openInBuffett(ticker)`: clear `logBox`, tất cả `.dr input`, ẩn `deepDiveCard` → rồi mới fetch
+- `openInTechnical(ticker)`: `destroyCharts()`, show spinner, set title mới → rồi mới fetch
+- Không còn hiện data FPT trong khi đang load HPG
+
+### Watchlist — load ngay từ localStorage cache
+- `renderWlTags()`: lưu watchlist vào `localStorage('wl_cache')` sau mỗi render
+- `loadWatchlist()`: render từ cache ngay (0ms), rồi sync API trong background
+- `doLogout()`: xóa `wl_cache` khi logout
+- Kết quả: watchlist hiện ngay khi app load, không cần chờ thêm API round trip
 
 ### Report Tổng Hợp (📋 Báo cáo)
 - Click nút **Báo cáo** trên mỗi row trong bảng Radar → modal tổng hợp
@@ -246,10 +264,27 @@ is_bank = find_row(inc, "Net Interest Income") is not None
 - Chuyển tab: auto-fetch khi switch sang Cơ bản hoặc Kỹ thuật nếu đã có mã
 - Scan ngầm khi chuyển tab (JS async không bị dừng)
 
-### Mobile Responsive
+### Mobile Responsive (cập nhật 2026-06-07)
 - **≤768px**: sub-tabs scroll ngang, report modal slide up từ dưới, charts nhỏ hơn
 - **≤480px**: ẩn đồng hồ + nút header, ẩn cột Kỹ thuật/Giá trong bảng radar, card padding nhỏ hơn
 - Bottom nav: active state có background tím nhạt + bold
+- `.fetch-row .fg`: `flex: 0 0 auto !important` để không chiếm height thừa khi column direction
+- `.dr input`: font `.62rem`, padding `4px 3px` — số không bị cắt trong ô
+- Bảng tiêu chí Buffett (`.ct`): wrap trong `<div style="overflow-x:auto">` — scroll ngang thay vì tràn
+
+### P&L / Danh Mục — fix đơn vị và hiển thị (2026-06-07)
+- **Bug**: `avg_price` lưu theo VNĐ đầy đủ (84500), `cur_price` từ vnstock theo nghìn (75.0) → lệch 1000 lần
+- **Fix server**: `price = df["close"].iloc[-1] * 1000` trong `get_price()` của `/api/portfolio/summary`
+- **Fix server**: thêm `total_shares` vào response
+- **Fix frontend**: bỏ hết suffix `B`, `k`, `tr` — dùng `toLocaleString('vi-VN')` số VNĐ đầy đủ
+- P&L stats: thêm ô **KL nắm giữ (CP)**
+- DCA section: `Giá TB: 27.000` (không có k), `Tổng vốn: 5.400.000` (số đầy đủ)
+- DCA per-user: backend dùng table `dca_transactions` với `WHERE username=?` → mỗi user thấy danh mục riêng
+
+### ⚠️ Lưu ý quan trọng về đơn vị giá (KHÔNG ĐỔI)
+- `avg_price` trong DCA: lưu theo **VNĐ đầy đủ** (vd: 84500 = 84,500đ/CP)
+- `cur_price` từ vnstock: trả về theo **nghìn VNĐ** (vd: 75.0 = 75,000đ) → server nhân ×1000 trước khi tính
+- **KHÔNG** lưu avg_price theo nghìn — sẽ lệch với data cũ của user
 
 ### PWA
 - Service Worker: network-first cho HTML (luôn load bản mới), cache-first cho static assets
