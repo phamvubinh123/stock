@@ -895,9 +895,21 @@ def health():
 
 
 def get_username(request: Request) -> str:
-    """Lấy username từ session, fallback 'default'."""
+    """Lấy username từ session, fallback 'default'. Tự restore từ DB nếu server restart."""
     token = request.cookies.get("sa_token") or request.headers.get("X-Token", "")
-    return SESSIONS.get(token, "default")
+    if not token:
+        return "default"
+    user = SESSIONS.get(token)
+    if not user and USE_DB:
+        # Server restart → SESSIONS bị clear → lookup DB để restore
+        try:
+            row = db_exec("SELECT username FROM sessions WHERE token=%s AND expires_at > NOW()", (token,), fetch="one")
+            if row:
+                user = row["username"]
+                SESSIONS[token] = user  # restore vào cache
+        except Exception as e:
+            log.warning(f"get_username DB lookup error: {e}")
+    return user or "default"
 
 # ─────────────────────────────────────────────
 # ROUTES — WATCHLIST
