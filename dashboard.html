@@ -2755,6 +2755,8 @@ async function triggerRadar() {
     if (!wlR.ok) throw new Error('Không lấy được watchlist');
     const wlD = await wlR.json();
     const tickers = (wlD.watchlist || []).filter(Boolean);
+    // Sync tags với server data để tránh mismatch với localStorage cache cũ
+    renderWlTags(tickers);
     if (!tickers.length) {
       _showEmptyPrompt('Watchlist trống — thêm mã để bắt đầu');
       return;
