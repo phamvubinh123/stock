@@ -1700,8 +1700,12 @@ def get_technical(ticker: str, period: int = Query(90)):
         cache_key = f"technical:{ticker}:{period}"
         cached = cache_get(cache_key)
         if cached:
-            log.info(f"[CACHE HIT] {cache_key}")
-            return ok(cached)
+            # Không trả cache nếu data xấu (history rỗng)
+            if cached.get("history") and len(cached["history"]) > 0:
+                log.info(f"[CACHE HIT] {cache_key}")
+                return ok(cached)
+            else:
+                log.warning(f"[CACHE BAD] {cache_key} — bỏ qua cache rỗng, fetch lại")
         end_date = str(datetime.date.today())
         start_date = str(datetime.date.today() - datetime.timedelta(days=period * 2))
 
@@ -1870,7 +1874,11 @@ def get_technical(ticker: str, period: int = Query(90)):
             "signals": signals,
             "history": df[cols].to_dict(orient="records"),
         }
-        cache_set(cache_key, payload)
+        # Chỉ cache khi có data thật
+        if payload.get("history") and len(payload["history"]) > 0:
+            cache_set(cache_key, payload)
+        else:
+            log.warning(f"[TECH] {ticker} history rỗng — không cache")
         return ok(payload)
 
     except HTTPException:
